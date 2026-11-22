@@ -240,7 +240,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             val steps = (r.depth.values.maxOrNull() ?: 0) + 2
             flowT.snapTo(0f)
             flowT.animateTo(steps.toFloat(), tween(steps * 230, easing = LinearEasing))
-            delay(if (r.won) 1600 else 900)
+            delay(if (r.won) 1600 else 2200)
             if (r.won) {
                 stars = when {
                     usedSolution -> 1
@@ -304,7 +304,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             // Board
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 // the roof strip (with the tank) sits above the house
-                val roofRows = 1.15f
+                val roofRows = 1.9f
                 val cell = minOf((maxWidth - 4.dp) / level.width, (maxHeight - 4.dp) / (level.height + roofRows))
                 val tankCol = level.cells.indexOfFirst { it.kind == Kind.TANK } % level.width
                 val roofLoop = rememberInfiniteTransition(label = "roof")
@@ -321,14 +321,19 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                         Canvas(Modifier.fillMaxSize()) {
                             drawRoof(level.room, cell.toPx(), tankCol, drift)
                         }
-                        Canvas(
-                            Modifier.offset(x = cell * tankCol, y = cell * (roofRows - 1f)).size(cell)
-                        ) {
-                            drawTank(roofPhase, tankOut, S, tankOut, roofFlow)
+                        // drop-pipe from the tank down through the roof, same size as the board pipes
+                        Canvas(Modifier.offset(x = cell * tankCol, y = cell * (roofRows - 1f)).size(cell)) {
+                            drawPipe(N or S, tankOut, N, roofFlow)
+                        }
+                        // the tank itself, bigger, standing on the roof above the entry square
+                        val tankSize = cell * 1.5f
+                        val tx = (cell * tankCol + cell / 2 - tankSize / 2).coerceIn(0.dp, cell * level.width - tankSize)
+                        Canvas(Modifier.offset(x = tx, y = cell * roofRows - tankSize - cell * 0.38f).size(tankSize)) {
+                            drawTank(roofPhase, if (phase == Phase.PLAYING) 0f else t.coerceIn(0f, 1f), 0, 0f, roofFlow)
                         }
                         Text(
                             "Tank ${level.tankPressure}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                            modifier = Modifier.offset(x = cell * tankCol + 2.dp, y = 2.dp)
+                            modifier = Modifier.offset(x = tx + 4.dp, y = 2.dp)
                                 .clip(RoundedCornerShape(4.dp)).background(Color(0xCC0E1A2B)).padding(horizontal = 4.dp),
                         )
                     }
@@ -348,11 +353,19 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                                     rot = rots[i],
                                     fill = fill,
                                     inlet = r?.inlet?.get(i) ?: 0,
-                                    leakMask = if (phase == Phase.DONE) r?.leakEnds?.get(i) ?: 0 else 0,
+                                    leakMask = if (fill >= 1f && phase != Phase.PLAYING) r?.leakEnds?.get(i) ?: 0 else 0,
+                                    leakGrow = if (phase == Phase.DONE) 1f else {
+                                        val d0 = if (kind == Kind.TANK) 0f else (r?.depth?.get(i)?.toFloat() ?: 0f) + 1f
+                                        ((t - d0 - 1f) / 3f).coerceIn(0f, 1f)
+                                    },
                                     delivered = if (fill >= 1f) r?.fixturePressure?.get(i) else null,
                                     need = level.need,
                                     tank = level.tankPressure,
-                                    sides = if (kind == Kind.TANK || kind == Kind.FIXTURE) connectedSides(level, rots, i) else 0,
+                                    sides = when (kind) {
+                                        Kind.TANK -> level.tankOutlets
+                                        Kind.FIXTURE -> connectedSides(level, rots, i)
+                                        else -> 0
+                                    },
                                     modifier = Modifier.size(cell),
                                     onTap = {
                                         if (phase == Phase.PLAYING && !revealing && kind == Kind.PIPE) {
@@ -451,7 +464,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
 
 @Composable
 fun TileView(
-    room: Room, index: Int, cell: Cell, rot: Int, fill: Float, inlet: Int, leakMask: Int, delivered: Int?,
+    room: Room, index: Int, cell: Cell, rot: Int, fill: Float, inlet: Int, leakMask: Int, leakGrow: Float, delivered: Int?,
     need: Int, tank: Int, sides: Int, modifier: Modifier, onTap: () -> Unit,
 ) {
     val angle by animateFloatAsState(rot * 90f, tween(180, easing = FastOutSlowInEasing), label = "rot")
@@ -482,11 +495,12 @@ fun TileView(
                 Modifier.fillMaxSize().graphicsLayer { rotationZ = angle - rot * 90f }
             ) {
                 drawPipe(rotateCW(cell.baseMask, rot), fill, inlet, flow)
-                if (leakMask != 0) drawLeaks(leakMask, slow)
+                if (leakMask != 0) drawLeaks(leakMask, slow, leakGrow)
             }
             Kind.TANK -> Canvas(Modifier.fillMaxSize()) {
-                // water inlet into the house from the roof tank
-                drawInlet(sides, fill, flow, slow)
+                // water inlet into the house from the roof tank, with its fixed outlets
+                drawInlet(sides, fill, flow, slow, showArrows = fill == 0f)
+                if (leakMask != 0) drawLeaks(leakMask, slow, leakGrow)
             }
             Kind.FIXTURE -> {
                 Canvas(Modifier.fillMaxSize()) {

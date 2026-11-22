@@ -489,20 +489,52 @@ fun DrawScope.drawStubs(sides: Int, wetSides: Int, fill: Float, flow: Float, out
     }
 }
 
-/** Water spraying out of open pipe ends. */
-fun DrawScope.drawLeaks(mask: Int, phase: Float) {
+/**
+ * Water gushing out of open pipe ends: a jet of drops thrown forward and sideways,
+ * splashes, and a puddle that spreads as [grow] goes 0..1.
+ */
+fun DrawScope.drawLeaks(mask: Int, phase: Float, grow: Float = 1f) {
     val half = size.minDimension / 2f
     for (d in DIRS) {
         if (mask and d.bit == 0) continue
-        val e = Offset(center.x + d.dc * half * 0.9f, center.y + d.dr * half * 0.9f)
+        val e = Offset(center.x + d.dc * half * 0.88f, center.y + d.dr * half * 0.88f)
+        val dir = Offset(d.dc.toFloat(), d.dr.toFloat())
         val perp = Offset(-d.dr.toFloat(), d.dc.toFloat())
-        val back = Offset(-d.dc.toFloat(), -d.dr.toFloat())
-        drawOval(WaterBlue.copy(alpha = 0.4f), Offset(e.x - u(0.22f), e.y - u(0.13f)), sz(0.44f, 0.26f))
-        for (k in 0 until 10) {
-            val q = (phase + k / 10f) % 1f
-            val spread = ((k % 5) - 2f) / 2f
-            val pos = e + back * (q * u(0.28f)) + perp * (spread * q * u(0.34f))
-            drawCircle(WaterLight.copy(alpha = (1f - q) * 0.95f), u(0.035f) * (1f - q * 0.5f), pos)
+        // spreading puddle on the floor
+        val pr = 0.12f + 0.3f * grow
+        drawOval(WaterBlue.copy(alpha = 0.28f + 0.17f * grow), Offset(e.x - u(pr), e.y - u(pr * 0.65f)), Size(u(pr * 2), u(pr * 1.3f)))
+        drawOval(WaterLight.copy(alpha = 0.3f), Offset(e.x - u(pr * 0.5f), e.y - u(pr * 0.35f)), Size(u(pr), u(pr * 0.5f)))
+        // the gushing jet: drops fly out, arc sideways and fall back
+        for (k in 0 until 14) {
+            val q = (phase * 1.6f + k / 14f) % 1f
+            val spread = ((k % 7) - 3f) / 3f
+            val out = q * u(0.22f) - q * q * u(0.3f)
+            val pos = e + dir * out + perp * (spread * q * u(0.36f))
+            drawCircle(WaterLight.copy(alpha = (1f - q) * 0.95f), u(0.032f) * (1.1f - q * 0.6f), pos)
+        }
+        // splash rings in the puddle
+        for (k in 0 until 2) {
+            val q = (phase + k * 0.5f) % 1f
+            drawCircle(Color.White.copy(alpha = (1f - q) * 0.6f), u(0.03f + q * pr * 0.8f), e - dir * u(0.08f), style = Stroke(u(0.01f)))
+        }
+    }
+}
+
+/** Little arrows running along an outlet to show kids where the water will go. */
+fun DrawScope.drawOutletArrows(mask: Int, phase: Float) {
+    for (d in DIRS) {
+        if (mask and d.bit == 0) continue
+        val half = size.minDimension / 2f
+        for (k in 0 until 2) {
+            val f = 0.35f + ((phase + k * 0.5f) % 1f) * 0.5f
+            val c = Offset(center.x + d.dc * f * half, center.y + d.dr * f * half)
+            val dir = Offset(d.dc.toFloat(), d.dr.toFloat())
+            val perp = Offset(-d.dr.toFloat(), d.dc.toFloat())
+            val sz2 = u(0.06f)
+            val tip = c + dir * sz2
+            val alpha = 1f - kotlin.math.abs(f - 0.6f) * 2f
+            drawLine(Color.White.copy(alpha = alpha.coerceIn(0f, 1f)), tip, c - dir * sz2 * 0.2f + perp * sz2, u(0.02f), cap = StrokeCap.Round)
+            drawLine(Color.White.copy(alpha = alpha.coerceIn(0f, 1f)), tip, c - dir * sz2 * 0.2f - perp * sz2, u(0.02f), cap = StrokeCap.Round)
         }
     }
 }
@@ -516,6 +548,11 @@ fun DrawScope.drawLeaks(mask: Int, phase: Float) {
  * centred so they meet the neighbouring pipe exactly; water runs out along them by [fill].
  */
 fun DrawScope.drawTank(phase: Float, drain: Float, sides: Int, fill: Float, flow: Float) {
+    // steel stand on the roof
+    drawRect(Color(0xFF546E7A), p(0.24f, 0.86f), sz(0.05f, 0.12f))
+    drawRect(Color(0xFF546E7A), p(0.71f, 0.86f), sz(0.05f, 0.12f))
+    drawLine(Color(0xFF455A64), p(0.26f, 0.97f), p(0.74f, 0.88f), u(0.015f))
+    drawLine(Color(0xFF455A64), p(0.74f, 0.97f), p(0.26f, 0.88f), u(0.015f))
     // concrete base
     drawOval(Color(0x2E000000), p(0.14f, 0.87f), sz(0.76f, 0.1f))
     drawRoundRect(Color(0xFFA9A39A), p(0.16f, 0.84f), sz(0.68f, 0.09f), CornerRadius(u(0.015f)))
@@ -1159,9 +1196,9 @@ fun DrawScope.drawRoof(room: Room, cellPx: Float, tankCol: Int, phase: Float) {
  * through a stop valve into a water meter, then out to the connected [sides].
  * [fill] 0..1: first half fills the drop-pipe, second half the outlets.
  */
-fun DrawScope.drawInlet(sides: Int, fill: Float, flow: Float, phase: Float) {
+fun DrawScope.drawInlet(outlets: Int, fill: Float, flow: Float, phase: Float, showArrows: Boolean) {
     val down = DIRS[0]   // north: comes in from the top edge
-    val outs = DIRS.filter { sides and it.bit != 0 && it.bit != N }
+    val outs = DIRS.filter { outlets and it.bit != 0 && it.bit != N }
     armShadow(down, 0f, 1f)
     for (d in outs) armShadow(d, 0f, 1f)
     pipeArm(down, 0f, 1f)
@@ -1199,4 +1236,5 @@ fun DrawScope.drawInlet(sides: Int, fill: Float, flow: Float, phase: Float) {
     drawCircle(Color(0xFF263238), u(0.014f), c)
     // small glass highlight
     drawArc(Color(0x66FFFFFF), 200f, 60f, false, c - Offset(r * 0.6f, r * 0.6f), Size(r * 1.2f, r * 1.2f), style = Stroke(u(0.01f), cap = StrokeCap.Round))
+    if (showArrows) drawOutletArrows(outlets and N.inv(), phase)
 }

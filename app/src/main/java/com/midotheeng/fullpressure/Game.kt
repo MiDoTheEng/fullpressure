@@ -97,6 +97,23 @@ class Level(
     val width = rows[0].length
     val cells: List<Cell> = rows.flatMap { row -> row.map { parseCell(it) } }
     val fixtureCount = cells.count { it.kind == Kind.FIXTURE }
+
+    /** The water inlet's fixed outlet sides: the ones the solved route uses. */
+    val tankOutlets: Int = run {
+        val ti = cells.indexOfFirst { it.kind == Kind.TANK }
+        if (ti < 0) return@run 0
+        val r = ti / width
+        val c = ti % width
+        var m = 0
+        for (d in DIRS) {
+            val rr = r + d.dr
+            val cc = c + d.dc
+            if (rr !in 0 until height || cc !in 0 until width) continue
+            val cell = cells[rr * width + cc]
+            if (cell.kind == Kind.PIPE && cell.baseMask and opposite(d.bit) != 0) m = m or d.bit
+        }
+        m
+    }
 }
 
 class FlowResult(
@@ -126,19 +143,22 @@ fun simulate(level: Level, rots: List<Int>): FlowResult {
     val inlet = HashMap<Int, Int>()
     val queue = PriorityQueue<IntArray>(compareByDescending<IntArray> { it[0] })
 
-    // The tank feeds any neighbouring pipe that faces it.
+    // The water inlet feeds only through its fixed outlets; an outlet with nothing connected leaks.
+    val tankLeaks = HashMap<Int, Int>()
     for (i in cells.indices) {
         if (cells[i].kind != Kind.TANK) continue
         val r = i / w
         val c = i % w
         for (d in DIRS) {
+            if (level.tankOutlets and d.bit == 0) continue
             val rr = r + d.dr
             val cc = c + d.dc
-            if (!inside(rr, cc)) continue
             val j = rr * w + cc
-            if (cells[j].kind == Kind.PIPE && maskAt(j) and opposite(d.bit) != 0) {
+            if (inside(rr, cc) && cells[j].kind == Kind.PIPE && maskAt(j) and opposite(d.bit) != 0) {
                 val p = level.tankPressure - cells[j].cost
                 if (p > 0) queue.add(intArrayOf(p, j, opposite(d.bit), 0))
+            } else {
+                tankLeaks[i] = (tankLeaks[i] ?: 0) or d.bit
             }
         }
     }
@@ -184,6 +204,7 @@ fun simulate(level: Level, rots: List<Int>): FlowResult {
     val leaks = HashSet<Int>()
     val leakEnds = HashMap<Int, Int>()
     fun leak(i: Int, bit: Int) { leaks.add(i); leakEnds[i] = (leakEnds[i] ?: 0) or bit }
+    for ((i, bits) in tankLeaks) for (d in DIRS) if (bits and d.bit != 0) leak(i, d.bit)
     for (i in best.keys) {
         val r = i / w
         val c = i % w
