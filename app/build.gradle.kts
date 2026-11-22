@@ -12,8 +12,8 @@ android {
         applicationId = "com.midotheeng.fullpressure"
         minSdk = 28
         targetSdk = 35
-        versionCode = 19
-        versionName = "2.8"
+        versionCode = 20
+        versionName = "2.9"
     }
 
     signingConfigs {

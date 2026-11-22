@@ -48,6 +48,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
+import androidx.compose.runtime.withFrameMillis
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -169,6 +171,9 @@ fun LevelSelect(refresh: Int, onPick: (Int) -> Unit) {
     }
 }
 
+/** How long the water takes to cross one square, in milliseconds. */
+private const val STEP_MS = 330f
+
 private fun boardColor(room: Room) = when (room) {
     Room.KITCHEN -> Color(0xFF5A3A20)
     Room.BATHROOM -> Color(0xFF8E9BA8)
@@ -206,6 +211,16 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
         }
     }
     val flowT = remember(level.number) { Animatable(0f) }
+    // clock for leaks: puddles keep spreading for as long as the water runs
+    var flowStartMs by remember(level.number) { mutableLongStateOf(0L) }
+    var nowMs by remember(level.number) { mutableLongStateOf(0L) }
+    LaunchedEffect(phase) {
+        if (phase == Phase.FLOWING) {
+            flowStartMs = withFrameMillis { it }
+            nowMs = flowStartMs
+        }
+        while (phase != Phase.PLAYING) nowMs = withFrameMillis { it }
+    }
 
     fun startWater() {
         if (phase != Phase.PLAYING) return
@@ -241,8 +256,8 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
         if (phase == Phase.FLOWING && r != null) {
             val steps = (r.depth.values.maxOrNull() ?: 0) + 2
             flowT.snapTo(0f)
-            flowT.animateTo(steps.toFloat(), tween(steps * 330, easing = LinearEasing))
-            delay(if (r.won) 1600 else 2200)
+            flowT.animateTo(steps.toFloat(), tween((steps * STEP_MS).toInt(), easing = LinearEasing))
+            delay(if (r.won) 1600 else 3200)
             if (r.won) {
                 stars = when {
                     usedSolution -> 1
@@ -345,7 +360,9 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                         val f = if (kind == Kind.TANK) (t * 2f - 1f).coerceIn(0f, 1f) else fillOf(i)
                         if (f < 1f) null else {
                             val d0 = if (kind == Kind.TANK) 0f else (r.depth[i]?.toFloat() ?: 0f) + 1f
-                            val grow = if (phase == Phase.DONE) 1f else ((t - d0 - 1f) / 3f).coerceIn(0f, 1f)
+                            // the leak starts when water reaches it, then the puddle keeps growing with time
+                            val leakStartMs = (d0 + 1f) * STEP_MS
+                            val grow = (((nowMs - flowStartMs) - leakStartMs) / 3500f).coerceIn(0f, 2.2f)
                             LeakFx(i / level.width, i % level.width, bits, grow)
                         }
                     }
