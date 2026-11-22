@@ -2,10 +2,13 @@ package com.midotheeng.fullpressure
 
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -166,18 +169,47 @@ private fun DrawScope.armShadow(d: Dir, from: Float, to: Float) {
     drawRect(Shadow, tl, s)
 }
 
-/** Water inside a straight run, drawn from [a] to [b]. */
-private fun DrawScope.waterLine(a: Offset, b: Offset, flow: Float) {
-    if ((a - b).getDistance() < 0.5f) return
+/** Realistic water along [path]: dark body, bright core, bubbles carried along, foamy front. */
+private fun DrawScope.waterPath(path: Path, flow: Float, front: Boolean) {
     val t = u(PIPE_THICKNESS)
-    drawLine(WaterDeep, a, b, t * 0.5f)
-    drawLine(WaterBlue, a, b, t * 0.36f)
-    val on = u(0.05f)
-    val off = u(0.08f)
-    drawLine(
-        WaterLight, a, b, strokeWidth = t * 0.12f, cap = StrokeCap.Round,
-        pathEffect = PathEffect.dashPathEffect(floatArrayOf(on, off), -flow * (on + off)),
-    )
+    val measure = PathMeasure()
+    measure.setPath(path, false)
+    val len = measure.length
+    if (len < 0.5f) return
+    drawPath(path, WaterDeep, style = Stroke(t * 0.56f, cap = StrokeCap.Butt))
+    drawPath(path, WaterBlue, style = Stroke(t * 0.42f, cap = StrokeCap.Butt))
+    drawPath(path, WaterLight.copy(alpha = 0.55f), style = Stroke(t * 0.14f, cap = StrokeCap.Butt))
+    // bubbles drifting with the flow, at different sizes and lanes
+    val count = 8
+    val spacing = u(0.09f)
+    val period = count * spacing
+    var k = 0
+    while (k < count) {
+        val dist = (flow * period + k * spacing) % period
+        if (dist <= len) {
+            val pos = measure.getPosition(dist)
+            val tan = measure.getTangent(dist)
+            val lane = ((k * 7) % 5 - 2) * t * 0.06f
+            val off = Offset(-tan.y * lane, tan.x * lane)
+            val r = t * (0.035f + (k % 3) * 0.02f)
+            drawCircle(Color.White.copy(alpha = 0.75f), r, pos + off)
+        }
+        k++
+    }
+    if (front) {
+        // the advancing water front: rounded, with foam
+        val end = measure.getPosition(len)
+        drawCircle(WaterBlue, t * 0.24f, end)
+        drawCircle(Color.White.copy(alpha = 0.55f + 0.3f * flow), t * 0.16f, end)
+        drawCircle(WaterLight, t * 0.08f, end)
+    }
+}
+
+/** Water inside a straight run, flowing from [a] to [b]. */
+private fun DrawScope.waterLine(a: Offset, b: Offset, flow: Float, front: Boolean = false) {
+    if ((a - b).getDistance() < 0.5f) return
+    val path = Path().apply { moveTo(a.x, a.y); lineTo(b.x, b.y) }
+    waterPath(path, flow, front)
 }
 
 /** Socket (coupling) where the pipe meets the cell edge. */
@@ -222,15 +254,8 @@ private fun DrawScope.bend(a: Dir, b: Dir, fill: Float, inletBit: Int, flow: Flo
         val fromA = inletBit == a.bit
         val start = if (fromA) angA else angB
         val sweep = (if (fromA) delta else -delta) * fill
-        drawArc(WaterDeep, start, sweep, false, tl, box, style = Stroke(t * 0.5f))
-        drawArc(WaterBlue, start, sweep, false, tl, box, style = Stroke(t * 0.36f))
-        val on = u(0.05f)
-        val off = u(0.08f)
-        drawArc(
-            WaterLight, start, sweep, false, tl, box,
-            style = Stroke(t * 0.12f, cap = StrokeCap.Round,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(on, off), -flow * (on + off))),
-        )
+        val path = Path().apply { arcTo(Rect(tl, box), start, sweep, true) }
+        waterPath(path, flow, fill < 1f)
     }
 }
 
@@ -250,8 +275,8 @@ fun DrawScope.drawPipe(mask: Int, fill: Float, inletBit: Int, flow: Float) {
             val inArm = open.firstOrNull { it.bit == inletBit }
             val first = (fill * 2f).coerceAtMost(1f)
             val second = (fill * 2f - 1f).coerceIn(0f, 1f)
-            if (inArm != null) waterLine(armPoint(inArm, 1f), armPoint(inArm, 1f - first), flow)
-            if (second > 0f) for (d in open) if (d.bit != inletBit) waterLine(armPoint(d, 0f), armPoint(d, second), flow)
+            if (inArm != null) waterLine(armPoint(inArm, 1f), armPoint(inArm, 1f - first), flow, front = second == 0f && fill < 1f)
+            if (second > 0f) for (d in open) if (d.bit != inletBit) waterLine(armPoint(d, 0f), armPoint(d, second), flow, front = fill < 1f)
         }
     }
     for (d in open) socket(d)
@@ -266,8 +291,8 @@ fun DrawScope.drawStubs(sides: Int, wetSides: Int, fill: Float, flow: Float, out
         armShadow(d, 0.4f, 1f)
         pipeArm(d, 0.4f, 1f)
         if (wetSides and d.bit != 0 && fill > 0f) {
-            if (outward) waterLine(armPoint(d, 0.4f), armPoint(d, 0.4f + 0.6f * fill), flow)
-            else waterLine(armPoint(d, 1f), armPoint(d, 1f - 0.6f * fill), flow)
+            if (outward) waterLine(armPoint(d, 0.4f), armPoint(d, 0.4f + 0.6f * fill), flow, front = fill < 1f)
+            else waterLine(armPoint(d, 1f), armPoint(d, 1f - 0.6f * fill), flow, front = fill < 1f)
         }
         socket(d)
     }
@@ -293,30 +318,66 @@ fun DrawScope.drawLeaks(mask: Int, phase: Float) {
 
 // ---------- main water tank ----------
 
-/** Round water storage tank seen from above, open hatch showing the water. */
-fun DrawScope.drawTank(wobble: Float, phase: Float) {
-    val c = p(0.5f, 0.5f)
-    drawCircle(Shadow, u(0.4f), c + p(0.03f, 0.04f))
-    drawCircle(
-        Brush.radialGradient(listOf(Color(0xFF4F9AD6), Color(0xFF2867A8), Color(0xFF173F6E)),
-            center = p(0.42f, 0.4f), radius = u(0.5f)),
-        u(0.4f), c,
+/**
+ * Water storage tank, side view, with a cut-away window showing the water.
+ * [drain] 0..1 lowers the level a little as water leaves.
+ */
+fun DrawScope.drawTank(phase: Float, drain: Float) {
+    val left = 0.2f
+    val right = 0.8f
+    val top = 0.16f
+    val bottom = 0.8f
+    // stand
+    drawRect(Color(0xFF3B4650), p(0.24f, 0.8f), sz(0.06f, 0.12f))
+    drawRect(Color(0xFF3B4650), p(0.7f, 0.8f), sz(0.06f, 0.12f))
+    drawRect(Color(0xFF55616C), p(0.2f, 0.78f), sz(0.6f, 0.05f))
+    // shadow
+    drawRoundRect(Shadow, p(left + 0.03f, top + 0.03f), sz(right - left, bottom - top), CornerRadius(u(0.08f)))
+    // body (blue polyethylene)
+    drawRoundRect(
+        Brush.horizontalGradient(listOf(Color(0xFF16406E), Color(0xFF3F8BD0), Color(0xFF2A6AAE), Color(0xFF123659)),
+            startX = u(left), endX = u(right)),
+        p(left, top), sz(right - left, bottom - top), CornerRadius(u(0.08f)),
     )
-    // moulded ribs
-    for (r in listOf(0.34f, 0.28f)) {
-        drawCircle(Color(0x33000000), u(r), c, style = Stroke(u(0.018f)))
-        drawCircle(Color(0x22FFFFFF), u(r - 0.012f), c, style = Stroke(u(0.008f)))
+    // domed top and lid
+    drawOval(
+        Brush.horizontalGradient(listOf(Color(0xFF1B4C80), Color(0xFF5FA4E0), Color(0xFF1B4C80)), startX = u(left), endX = u(right)),
+        p(left, top - 0.06f), sz(right - left, 0.14f),
+    )
+    drawRoundRect(Color(0xFF0F2E52), p(0.4f, top - 0.1f), sz(0.2f, 0.06f), CornerRadius(u(0.02f)))
+    // cut-away window showing the water inside
+    val wl = 0.29f
+    val wr = 0.71f
+    val wt = 0.24f
+    val wb = 0.74f
+    drawRoundRect(Color(0xFF0C1B2C), p(wl, wt), sz(wr - wl, wb - wt), CornerRadius(u(0.04f)))
+    val level = 0.38f + drain * 0.12f
+    val amp = u(0.012f)
+    val wave = Path().apply {
+        moveTo(u(wl), u(wb))
+        lineTo(u(wl), u(level))
+        val steps = 16
+        for (k in 0..steps) {
+            val x = wl + (wr - wl) * k / steps
+            val y = u(level) + amp * kotlin.math.sin((k / steps.toFloat()) * 12.566f + phase * 6.2832f)
+            lineTo(u(x), y)
+        }
+        lineTo(u(wr), u(wb))
+        close()
     }
-    // open hatch with the water inside
-    drawCircle(Color(0xFF173F6E), u(0.2f), c)
-    drawCircle(
-        Brush.radialGradient(listOf(WaterLight, WaterBlue, WaterDeep), center = p(0.47f + wobble * 0.02f, 0.47f), radius = u(0.2f)),
-        u(0.17f), c,
-    )
-    drawCircle(Color.White.copy(alpha = (1f - phase) * 0.7f), u(0.03f + phase * 0.13f), c, style = Stroke(u(0.01f)))
-    drawCircle(Color(0xFF0F2E52), u(0.2f), c, style = Stroke(u(0.02f)))
-    // highlight
-    drawArc(Color(0x55FFFFFF), 200f, 60f, false, p(0.14f, 0.14f), sz(0.72f, 0.72f), style = Stroke(u(0.025f), cap = StrokeCap.Round))
+    drawPath(wave, Brush.verticalGradient(listOf(WaterLight, WaterBlue, WaterDeep), startY = u(level), endY = u(wb)))
+    // rising bubbles
+    for (k in 0 until 5) {
+        val q = (phase + k * 0.21f) % 1f
+        val x = wl + 0.06f + k * 0.075f
+        val y = wb - 0.04f - q * (wb - level - 0.06f)
+        drawCircle(Color.White.copy(alpha = 0.6f * (1f - q)), u(0.012f + (k % 2) * 0.006f), p(x, y))
+    }
+    drawRoundRect(Color(0x66FFFFFF), p(wl, wt), sz(wr - wl, wb - wt), CornerRadius(u(0.04f)), style = Stroke(u(0.012f)))
+    // ribs
+    for (y in listOf(0.2f, 0.76f)) drawLine(Color(0x44000000), p(left, y), p(right, y), u(0.018f))
+    // glass glare
+    drawLine(Color(0x33FFFFFF), p(wl + 0.04f, wt + 0.03f), p(wl + 0.04f, wb - 0.03f), u(0.02f), cap = StrokeCap.Round)
 }
 
 // ---------- fixtures ----------

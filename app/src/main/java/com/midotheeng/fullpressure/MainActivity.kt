@@ -361,7 +361,7 @@ fun TileView(
             Kind.TANK -> {
                 Canvas(Modifier.fillMaxSize()) {
                     drawStubs(sides, sides, fill, flow, outward = true)
-                    drawTank(wobble, slow)
+                    drawTank(slow, fill)
                 }
                 Text(
                     "$tank", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black,
