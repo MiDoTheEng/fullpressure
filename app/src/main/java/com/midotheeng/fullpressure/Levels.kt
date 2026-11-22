@@ -1,77 +1,77 @@
 package com.midotheeng.fullpressure
 
 // Each level is drawn in its SOLVED state; the game scrambles the pipes.
-// T = tank, S = sink, W = WC, H = shower, K = kitchen, # = wall, . = empty.
-// Pipes not on the route are decoys.
+// T = tank, # = wall/counter, . = floor. Bathroom: S basin, H shower, B bathtub.
+// Kitchen: K sink, D dishwasher, M washing machine. Pipes not on the route are decoys.
 val LEVELS: List<Level> = listOf(
-    Level(1, listOf(
+    Level(1, Room.BATHROOM, listOf(
         "....",
         "T──S",
         "....",
         "....",
-    ), 20, 1, null, "Tap a pipe to turn it. Connect the tank to the sink, then open the valve."),
-    Level(2, listOf(
+    ), 20, 1, null, "Tap a pipe to turn it. Connect the tank to the basin, then open the valve."),
+    Level(2, Room.BATHROOM, listOf(
         "T─┐.",
         "..│.",
         "..└S",
         "....",
     ), 20, 1, null, "Elbows turn corners."),
-    Level(3, listOf(
+    Level(3, Room.BATHROOM, listOf(
         ".....",
         "T─┐..",
         "..│..",
-        "..└─W",
+        "..└─H",
         ".....",
     ), 20, 1, null, "Not sure? Open the valve to test your route."),
-    Level(4, listOf(
+    Level(4, Room.KITCHEN, listOf(
         ".....",
-        "T─┬─S",
+        "T─┬─K",
         "..│..",
-        "..W..",
+        "..D..",
         ".....",
-    ), 20, 1, null, "A tee splits the flow between two fixtures."),
-    Level(5, listOf(
+    ), 20, 1, null, "A tee splits the flow between the sink and the dishwasher."),
+    Level(5, Room.BATHROOM, listOf(
         "S....",
         "│.─..",
         "├─┐.┐",
         "T.│..",
-        "..└─W",
+        "..└─H",
     ), 20, 1, 90, "Watch for leaks: any open pipe end spills water."),
-    Level(6, listOf(
-        "T─┐#S",
+    Level(6, Room.KITCHEN, listOf(
+        "T─┐#K",
         "##│#│",
         "┌─┘#│",
-        "├W##│",
+        "├M##│",
         "└───┘",
-    ), 30, 2, 90, "Walls block the obvious route. Go around."),
-    Level(7, listOf(
+    ), 30, 2, 90, "The counters are in the way. Go around them."),
+    Level(7, Room.BATHROOM, listOf(
         ".─....",
         "T──┬─S",
         "┐..│.└",
         ".┌─┴─┐",
         ".│.┼.│",
-        ".W...K",
+        ".B...H",
     ), 20, 3, 90, "Not every pipe is needed."),
-    Level(8, listOf(
-        "┌.H...",
+    Level(8, Room.KITCHEN, listOf(
+        "┌.K...",
         "..│...",
-        "T─┼──S",
+        "T─┼──D",
         "..│.─.",
         "..└─┐.",
-        "┘...W.",
+        "┘...M.",
     ), 20, 3, 75, "A cross sends water four ways."),
-    Level(9, listOf(
+    Level(9, Room.BATHROOM, listOf(
         "S─┐..┐",
         "┬.│.H.",
         "..├─┘.",
         "T─┤...",
         "..│.│.",
-        "..└──K",
+        "..└──B",
     ), 20, 4, 75, "Match the par moves to earn 3 stars."),
-    Level(10, listOf(
-        "H─┐.W.",
+    Level(10, Room.BATHROOM, listOf(
+        "H─┐.S.",
         "└.│.│.",
-        "T─┼─┴S",
+        "T─┼─┴B",
         "..│.┬.",
         "┌─┘...",
         "S..─..",

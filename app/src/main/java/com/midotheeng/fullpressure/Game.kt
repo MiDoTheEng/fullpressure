@@ -29,11 +29,15 @@ fun rotateCW(mask: Int, times: Int): Int {
 
 enum class Kind { EMPTY, WALL, TANK, FIXTURE, PIPE }
 
+enum class Room(val label: String) { BATHROOM("Bathroom"), KITCHEN("Kitchen") }
+
 enum class FixtureType(val label: String, val ch: Char) {
-    SINK("Sink", 'S'),
-    WC("WC", 'W'),
+    SINK("Basin", 'S'),
     SHOWER("Shower", 'H'),
-    KITCHEN("Kitchen", 'K'),
+    BATH("Bathtub", 'B'),
+    KITCHEN("Sink", 'K'),
+    DISHWASHER("Dishwasher", 'D'),
+    WASHER("Washer", 'M'),
 }
 
 data class Cell(
@@ -70,6 +74,7 @@ private fun parseCell(ch: Char): Cell {
 
 class Level(
     val number: Int,
+    val room: Room,
     rows: List<String>,
     val tankPressure: Int,
     val need: Int,              // minimum pressure every fixture needs

@@ -218,7 +218,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onBack) { Text("‹ Levels", color = TextDim) }
                 Spacer(Modifier.weight(1f))
-                Text("Level ${level.number}", color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Level ${level.number} · ${level.room.label}", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(Modifier.weight(1f))
                 Text(
                     if (level.timeLimit != null) "⏱ ${timeLeft}s" else "",
@@ -237,13 +237,15 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 val cell = minOf((maxWidth - 4.dp) / level.width, (maxHeight - 4.dp) / level.height)
                 Column(
-                    Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xFF0A131E)).padding(2.dp)
+                    Modifier.clip(RoundedCornerShape(10.dp)).background(if (level.room == Room.BATHROOM) Color(0xFF8E9BA8) else Color(0xFF5A3A20)).padding(2.dp)
                 ) {
                     for (row in 0 until level.height) {
                         Row {
                             for (col in 0 until level.width) {
                                 val i = row * level.width + col
                                 TileView(
+                                    room = level.room,
+                                    index = i,
                                     cell = level.cells[i],
                                     rot = rots[i],
                                     wet = isWet(i),
@@ -304,7 +306,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
 
 @Composable
 fun TileView(
-    cell: Cell, rot: Int, wet: Boolean, leakMask: Int, delivered: Int?,
+    room: Room, index: Int, cell: Cell, rot: Int, wet: Boolean, leakMask: Int, delivered: Int?,
     need: Int, tank: Int, sides: Int, modifier: Modifier, onTap: () -> Unit,
 ) {
     val angle by animateFloatAsState(rot * 90f, tween(180, easing = FastOutSlowInEasing), label = "rot")
@@ -321,13 +323,13 @@ fun TileView(
     val satisfied = delivered != null && delivered >= need
     Box(
         modifier
-            .padding(1.dp)
-            .clip(RoundedCornerShape(5.dp))
+            .padding(if (room == Room.BATHROOM) 1.dp else 0.dp)
+            .clip(RoundedCornerShape(if (room == Room.BATHROOM) 3.dp else 0.dp))
             .clickable(enabled = cell.kind == Kind.PIPE) { onTap() },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
-            if (cell.kind == Kind.WALL) drawBricks() else drawFloor()
+            if (cell.kind == Kind.WALL) drawWall(room, index) else drawFloor(room, index)
             if (leakMask != 0) drawRect(Leak.copy(alpha = 0.22f))
         }
         when (cell.kind) {
@@ -350,13 +352,14 @@ fun TileView(
             }
             Kind.FIXTURE -> {
                 Canvas(Modifier.fillMaxSize()) {
-                    if (satisfied) drawCircle(Ok.copy(alpha = 0.18f), size.minDimension * 0.48f)
                     drawStubs(sides, delivered != null, flow)
                     when (cell.fixture) {
-                        FixtureType.SINK -> drawSink(satisfied, slow)
-                        FixtureType.WC -> drawWC(satisfied, slow)
-                        FixtureType.SHOWER -> drawShower(satisfied, flow)
-                        FixtureType.KITCHEN -> drawKitchen(satisfied, slow)
+                        FixtureType.SINK -> drawBasin(satisfied, slow)
+                        FixtureType.SHOWER -> drawShower(satisfied, slow)
+                        FixtureType.BATH -> drawBathtub(satisfied, slow)
+                        FixtureType.KITCHEN -> drawKitchenSink(satisfied, slow)
+                        FixtureType.DISHWASHER -> drawDishwasher(satisfied, slow)
+                        FixtureType.WASHER -> drawWasher(satisfied, slow)
                         null -> {}
                     }
                 }
