@@ -170,6 +170,7 @@ private fun boardColor(room: Room) = when (room) {
     Room.GARDEN -> Color(0xFF2F4A22)
     Room.VILLA -> Color(0xFF7A6A58)
     Room.TOWER -> Color(0xFF59636E)
+    Room.STREET -> Color(0xFF6B6F73)
 }
 
 private fun starText(n: Int) = "★".repeat(n) + "☆".repeat(3 - n)
@@ -417,8 +418,8 @@ fun TileView(
     val satisfied = delivered != null && delivered >= need
     Box(
         modifier
-            .padding(if (room == Room.BATHROOM || room == Room.TOWER) 1.dp else 0.dp)
-            .clip(RoundedCornerShape(if (room == Room.BATHROOM || room == Room.TOWER) 3.dp else 0.dp))
+            .padding(if (room == Room.BATHROOM || room == Room.TOWER || room == Room.STREET) 1.dp else 0.dp)
+            .clip(RoundedCornerShape(if (room == Room.BATHROOM || room == Room.TOWER || room == Room.STREET) 3.dp else 0.dp))
             .clickable(enabled = cell.kind == Kind.PIPE) { onTap() },
         contentAlignment = Alignment.Center,
     ) {
@@ -457,6 +458,8 @@ fun TileView(
                         FixtureType.GARDEN_TAP -> drawGardenTap(satisfied, slow)
                         FixtureType.SPRINKLER -> drawSprinkler(satisfied, slow)
                         FixtureType.FOUNTAIN -> drawFountain(satisfied, slow)
+                        FixtureType.HYDRANT -> drawHydrant(satisfied, flow)
+                        FixtureType.DRINKING -> drawDrinkingFountain(satisfied, slow)
                         null -> {}
                     }
                 }

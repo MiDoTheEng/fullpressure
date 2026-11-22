@@ -35,6 +35,7 @@ enum class Room(val label: String, val world: String) {
     GARDEN("Garden", "World 3 · Garden"),
     VILLA("Villa", "World 4 · Villa"),
     TOWER("Sky Tower", "World 5 · Sky Tower"),
+    STREET("Street", "World 6 · City Street"),
 }
 
 enum class FixtureType(val label: String, val ch: Char) {
@@ -47,6 +48,8 @@ enum class FixtureType(val label: String, val ch: Char) {
     GARDEN_TAP("Tap", 'G'),
     SPRINKLER("Sprinkler", 'P'),
     FOUNTAIN("Fountain", 'N'),
+    HYDRANT("Hydrant", 'Y'),
+    DRINKING("Drinking fountain", 'Q'),
 }
 
 data class Cell(

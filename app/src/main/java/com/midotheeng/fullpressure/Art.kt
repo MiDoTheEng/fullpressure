@@ -138,6 +138,23 @@ fun DrawScope.drawFloor(room: Room, index: Int) {
             }
             drawLine(Color(0x33FFFFFF), p(0.0f, 0.75f), p(0.75f, 0.0f), u(0.12f))
         }
+        Room.STREET -> {
+            // interlocking paving stones
+            drawRect(Color(0xFF8A8C90))
+            val tones = listOf(Color(0xFFC9C3B6), Color(0xFFB8B2A5), Color(0xFFD4CEC2))
+            val rows = 4
+            val bh = size.height / rows
+            val bw = size.width / 2f
+            val gap = u(0.025f)
+            for (r in 0 until rows) {
+                var x = if (r % 2 == 0) 0f else -bw / 2f
+                var k = 0
+                while (x < size.width) {
+                    drawRoundRect(tones[(r + k + index) % 3], Offset(x + gap / 2, r * bh + gap / 2), Size(bw - gap, bh - gap), CornerRadius(u(0.02f)))
+                    x += bw; k++
+                }
+            }
+        }
     }
 }
 
@@ -218,6 +235,26 @@ fun DrawScope.drawWall(room: Room, index: Int) {
             drawRect(Color(0xFF39434E), style = Stroke(u(0.06f)))
             drawLine(Color(0xFF39434E), p(0.5f, 0f), p(0.5f, 1f), u(0.03f))
             drawLine(Color(0x55FFFFFF), p(0.1f, 0.9f), p(0.4f, 0.1f), u(0.05f))
+        }
+        Room.STREET -> {
+            // a little parked car, seen from above
+            drawRect(Color(0xFF55595E))
+            drawLine(Color(0xFFF2F2F2), p(0.04f, 0f), p(0.04f, 1f), u(0.025f))
+            val colors = listOf(Color(0xFFE53935), Color(0xFF1E88E5), Color(0xFFFFC107), Color(0xFF43A047))
+            val body = colors[index % colors.size]
+            drawRoundRect(Color(0x44000000), p(0.25f, 0.1f), sz(0.54f, 0.84f), CornerRadius(u(0.14f)))
+            drawRoundRect(Brush.horizontalGradient(listOf(body.copy(red = body.red * 0.7f, green = body.green * 0.7f, blue = body.blue * 0.7f), body, body.copy(red = body.red * 0.75f, green = body.green * 0.75f, blue = body.blue * 0.75f)), startX = u(0.22f), endX = u(0.78f)),
+                p(0.22f, 0.07f), sz(0.56f, 0.84f), CornerRadius(u(0.14f)))
+            // windscreen, roof, rear window
+            drawRoundRect(Color(0xFF263238), p(0.29f, 0.24f), sz(0.42f, 0.14f), CornerRadius(u(0.04f)))
+            drawRoundRect(body.copy(alpha = 1f), p(0.3f, 0.39f), sz(0.4f, 0.24f), CornerRadius(u(0.04f)))
+            drawRoundRect(Color(0xFF263238), p(0.31f, 0.64f), sz(0.38f, 0.1f), CornerRadius(u(0.03f)))
+            drawLine(Color(0x55FFFFFF), p(0.33f, 0.27f), p(0.45f, 0.27f), u(0.02f), cap = StrokeCap.Round)
+            // headlights and wheels
+            drawCircle(Color(0xFFFFF59D), u(0.035f), p(0.3f, 0.11f))
+            drawCircle(Color(0xFFFFF59D), u(0.035f), p(0.7f, 0.11f))
+            for ((wx, wy) in listOf(0.2f to 0.25f, 0.8f to 0.25f, 0.2f to 0.74f, 0.8f to 0.74f))
+                drawRoundRect(Color(0xFF1C1C1C), p(wx - 0.03f, wy - 0.07f), sz(0.06f, 0.14f), CornerRadius(u(0.02f)))
         }
     }
 }
@@ -921,3 +958,89 @@ fun DrawScope.drawFountain(active: Boolean, phase: Float) {
     }
 }
 
+
+// ---------- street ----------
+
+/** Red fire hydrant; when it gets water it sprays jets out of both side nozzles. */
+fun DrawScope.drawHydrant(active: Boolean, phase: Float) {
+    if (active) {
+        drawOval(WaterBlue.copy(alpha = 0.35f), p(0.08f, 0.72f), sz(0.84f, 0.2f))
+        // arcing jets from both nozzles
+        for (side in listOf(-1f, 1f)) {
+            for (k in 0 until 9) {
+                val q = (phase + k / 9f) % 1f
+                val x = 0.5f + side * (0.18f + q * 0.3f)
+                val y = 0.44f - 0.12f * kotlin.math.sin(q * 3.1416f) + q * 0.3f
+                drawCircle(WaterLight.copy(alpha = 1f - q * 0.6f), u(0.03f - q * 0.012f), p(x, y))
+            }
+        }
+    }
+    // base
+    drawRoundRect(Color(0x44000000), p(0.32f, 0.8f), sz(0.4f, 0.08f), CornerRadius(u(0.03f)))
+    drawRoundRect(Color(0xFFB71C1C), p(0.3f, 0.74f), sz(0.4f, 0.1f), CornerRadius(u(0.03f)))
+    // barrel
+    drawRoundRect(
+        Brush.horizontalGradient(listOf(Color(0xFF8E1212), Color(0xFFFF6B6B), Color(0xFFE53935), Color(0xFF8E1212)), startX = u(0.34f), endX = u(0.66f)),
+        p(0.34f, 0.32f), sz(0.32f, 0.44f), CornerRadius(u(0.04f)),
+    )
+    // dome cap
+    drawArc(
+        Brush.horizontalGradient(listOf(Color(0xFF8E1212), Color(0xFFFF6B6B), Color(0xFF8E1212)), startX = u(0.32f), endX = u(0.68f)),
+        180f, 180f, true, p(0.32f, 0.18f), sz(0.36f, 0.28f),
+    )
+    drawRoundRect(Color(0xFFFFC107), p(0.45f, 0.12f), sz(0.1f, 0.08f), CornerRadius(u(0.02f)))
+    drawRoundRect(Color(0xFFB71C1C), p(0.31f, 0.3f), sz(0.38f, 0.05f), CornerRadius(u(0.02f)))
+    // side nozzles with yellow caps
+    for (side in listOf(-1f, 1f)) {
+        drawRoundRect(Color(0xFFC62828), p(0.5f + side * 0.2f - 0.06f, 0.4f), sz(0.12f, 0.1f), CornerRadius(u(0.02f)))
+        if (!active) drawCircle(Color(0xFFFFC107), u(0.035f), p(0.5f + side * 0.26f, 0.45f))
+    }
+    // front nozzle
+    drawCircle(Color(0xFFC62828), u(0.06f), p(0.5f, 0.55f))
+    drawCircle(Color(0xFFFFC107), u(0.035f), p(0.5f, 0.55f))
+}
+
+/** Stone drinking fountain with a little bird that dips its head to drink. */
+fun DrawScope.drawDrinkingFountain(active: Boolean, phase: Float) {
+    // pedestal
+    drawRoundRect(Color(0x44000000), p(0.36f, 0.48f), sz(0.32f, 0.42f), CornerRadius(u(0.03f)))
+    drawRoundRect(
+        Brush.horizontalGradient(listOf(Color(0xFF8C8577), Color(0xFFD9D2C4), Color(0xFF9E978A)), startX = u(0.34f), endX = u(0.66f)),
+        p(0.34f, 0.46f), sz(0.32f, 0.42f), CornerRadius(u(0.03f)),
+    )
+    // bowl
+    drawOval(Color(0x44000000), p(0.18f, 0.38f), sz(0.68f, 0.18f))
+    drawOval(
+        Brush.horizontalGradient(listOf(Color(0xFF8C8577), Color(0xFFE6E0D3), Color(0xFF9E978A)), startX = u(0.16f), endX = u(0.84f)),
+        p(0.16f, 0.34f), sz(0.68f, 0.18f),
+    )
+    drawOval(if (active) WaterBlue.copy(alpha = 0.8f) else Color(0xFF6E7D88), p(0.22f, 0.36f), sz(0.56f, 0.12f))
+    // bubbler and its little arc of water
+    drawRoundRect(chrome(0.47f, 0.53f), p(0.47f, 0.3f), sz(0.06f, 0.08f), CornerRadius(u(0.02f)))
+    if (active) {
+        val arc = Path().apply {
+            moveTo(u(0.5f), u(0.3f))
+            quadraticBezierTo(u(0.58f), u(0.12f), u(0.66f), u(0.38f))
+        }
+        drawPath(arc, WaterLight, style = Stroke(u(0.025f), cap = StrokeCap.Round))
+        drawCircle(Color.White.copy(alpha = 1f - phase), u(0.01f + phase * 0.04f), p(0.66f, 0.41f), style = Stroke(u(0.008f)))
+    }
+    // the bird on the rim: dips to drink when there's water
+    val dip = if (active) (kotlin.math.sin(phase * 6.2832f).coerceAtLeast(0f)) * 25f else 0f
+    val bx = 0.28f
+    val by = 0.33f
+    rotate(dip, p(bx, by + 0.04f)) {
+        drawOval(Color(0xFF42A5F5), p(bx - 0.08f, by - 0.05f), sz(0.14f, 0.1f))      // body
+        drawOval(Color(0xFF1E88E5), p(bx - 0.1f, by - 0.035f), sz(0.07f, 0.05f))      // tail
+        drawOval(Color(0xFF90CAF9), p(bx - 0.03f, by - 0.01f), sz(0.07f, 0.05f))      // belly
+        drawCircle(Color(0xFF42A5F5), u(0.045f), p(bx + 0.06f, by - 0.07f))           // head
+        drawCircle(Color.White, u(0.014f), p(bx + 0.07f, by - 0.08f))
+        drawCircle(Color(0xFF212121), u(0.008f), p(bx + 0.074f, by - 0.08f))
+        val beak = Path().apply {
+            moveTo(u(bx + 0.1f), u(by - 0.08f)); lineTo(u(bx + 0.14f), u(by - 0.065f)); lineTo(u(bx + 0.1f), u(by - 0.055f)); close()
+        }
+        drawPath(beak, Color(0xFFFFA000))
+    }
+    drawLine(Color(0xFFFFA000), p(bx - 0.01f, by + 0.04f), p(bx - 0.01f, by + 0.06f), u(0.01f))
+    drawLine(Color(0xFFFFA000), p(bx + 0.02f, by + 0.04f), p(bx + 0.02f, by + 0.06f), u(0.01f))
+}
