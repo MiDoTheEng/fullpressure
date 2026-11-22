@@ -241,7 +241,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
         if (phase == Phase.FLOWING && r != null) {
             val steps = (r.depth.values.maxOrNull() ?: 0) + 2
             flowT.snapTo(0f)
-            flowT.animateTo(steps.toFloat(), tween(steps * 230, easing = LinearEasing))
+            flowT.animateTo(steps.toFloat(), tween(steps * 330, easing = LinearEasing))
             delay(if (r.won) 1600 else 2200)
             if (r.won) {
                 stars = when {
@@ -312,7 +312,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                 val roofLoop = rememberInfiniteTransition(label = "roof")
                 val roofPhase by roofLoop.animateFloat(0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "roofPhase")
                 val drift by roofLoop.animateFloat(0f, 1f, infiniteRepeatable(tween(12000, easing = LinearEasing), RepeatMode.Reverse), label = "drift")
-                val roofFlow by roofLoop.animateFloat(0f, 1f, infiniteRepeatable(tween(420, easing = LinearEasing)), label = "roofFlow")
+                val roofFlow by roofLoop.animateFloat(0f, 1f, infiniteRepeatable(tween(560, easing = LinearEasing)), label = "roofFlow")
                 val tankOut = if (phase == Phase.PLAYING) 0f else (t * 2f).coerceIn(0f, 1f)
                 Column(
                     Modifier.clip(RoundedCornerShape(10.dp))
@@ -490,7 +490,7 @@ fun TileView(
     val angle by animateFloatAsState(rot * 90f, tween(180, easing = FastOutSlowInEasing), label = "rot")
     val loop = rememberInfiniteTransition(label = "loop")
     val flow by loop.animateFloat(
-        0f, 1f, infiniteRepeatable(tween(420, easing = LinearEasing)), label = "flow",
+        0f, 1f, infiniteRepeatable(tween(560, easing = LinearEasing)), label = "flow",
     )
     val slow by loop.animateFloat(
         0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "slow",
