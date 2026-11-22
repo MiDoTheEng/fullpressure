@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.FullPressure" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/fp_bg</item>
+        <item name="android:statusBarColor">@color/fp_bg</item>
+        <item name="android:navigationBarColor">@color/fp_bg</item>
+    </style>
+    <color name="fp_bg">#0E1A2B</color>
+</resources>
