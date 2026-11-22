@@ -20,6 +20,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
@@ -193,6 +194,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
     var stars by remember(level.number) { mutableIntStateOf(0) }
     var revealing by remember(level.number) { mutableStateOf(false) }
     var usedSolution by remember(level.number) { mutableStateOf(false) }
+    var extraTime by remember(level.number) { mutableIntStateOf(0) }   // +10 s taps used this level
     var hints by remember { mutableStateOf(Hints.state(ctx)) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -215,6 +217,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
         }
         result = null
         usedSolution = false
+        extraTime = 0
         countdown = waterIn
         phase = Phase.PLAYING
         attempt++
@@ -238,7 +241,11 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             flowT.animateTo(steps.toFloat(), tween(steps * 230, easing = LinearEasing))
             delay(if (r.won) 1600 else 900)
             if (r.won) {
-                stars = if (usedSolution) 1 else starsFor(moves, puzzle.par)
+                stars = when {
+                    usedSolution -> 1
+                    extraTime > 0 -> minOf(2, starsFor(moves, puzzle.par))
+                    else -> starsFor(moves, puzzle.par)
+                }
                 saveStars(ctx, level.number, stars)
             }
             phase = Phase.DONE
@@ -340,7 +347,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             Text(level.hint, color = TextDim, fontSize = 14.sp, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
                     onClick = {
                         if (Hints.use(ctx)) {
@@ -351,6 +358,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                     enabled = phase == Phase.PLAYING && !revealing && hints.first > 0,
                     modifier = Modifier.height(60.dp),
                     shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp),
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         if (hints.first > 0) {
@@ -360,6 +368,23 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                             Text("⏳", fontSize = 16.sp)
                             Text(formatWait(hints.second), fontSize = 12.sp, color = TextDim)
                         }
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        if (extraTime < 3) {
+                            countdown += 10
+                            extraTime++
+                        }
+                    },
+                    enabled = phase == Phase.PLAYING && !revealing && extraTime < 3,
+                    modifier = Modifier.height(60.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp),
+                ) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("⏱ +10s", fontSize = 15.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        Text("${3 - extraTime} left", fontSize = 11.sp, color = TextDim)
                     }
                 }
                 Button(
@@ -374,8 +399,8 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                 ) {
                     if (phase == Phase.PLAYING) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text("Water in ${countdown}s", fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White)
-                            Text("tap to open the valve now", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                            Text("Water in ${countdown}s", fontSize = 18.sp, fontWeight = FontWeight.Black, color = Color.White)
+                            Text("tap to start now", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
                         }
                     } else {
                         Text("WATER FLOWING…", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
