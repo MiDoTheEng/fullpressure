@@ -266,3 +266,22 @@ fun tapsToSolve(level: Level, i: Int, rot: Int): Int {
     val base = level.cells[i].baseMask
     return (0..3).first { k -> rotateCW(base, rot + k) == base }
 }
+
+/** Spare pipes (not on the route) that currently point into the tank and would leak. */
+fun sparePipesFacingTank(level: Level, rots: List<Int>, route: Collection<Int>): List<Int> {
+    val out = ArrayList<Int>()
+    for (i in level.cells.indices) {
+        if (level.cells[i].kind != Kind.TANK) continue
+        val r = i / level.width
+        val c = i % level.width
+        for (d in DIRS) {
+            val rr = r + d.dr
+            val cc = c + d.dc
+            if (rr !in 0 until level.height || cc !in 0 until level.width) continue
+            val j = rr * level.width + cc
+            val cell = level.cells[j]
+            if (cell.kind == Kind.PIPE && j !in route && rotateCW(cell.baseMask, rots[j]) and opposite(d.bit) != 0) out.add(j)
+        }
+    }
+    return out
+}

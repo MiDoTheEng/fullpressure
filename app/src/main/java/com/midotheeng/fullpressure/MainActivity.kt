@@ -191,6 +191,13 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
     var stars by remember(level.number) { mutableIntStateOf(0) }
     var revealing by remember(level.number) { mutableStateOf(false) }
     var usedSolution by remember(level.number) { mutableStateOf(false) }
+    var hints by remember { mutableStateOf(Hints.state(ctx)) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            hints = Hints.state(ctx)
+            delay(1000)
+        }
+    }
     val flowT = remember(level.number) { Animatable(0f) }
 
     fun startWater() {
@@ -242,6 +249,11 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
     LaunchedEffect(revealing) {
         if (!revealing) return@LaunchedEffect
         usedSolution = true
+        // spare pipes pointing into the tank would leak: turn them back first
+        for (i in sparePipesFacingTank(level, rots, puzzle.route)) {
+            rots[i] = rots[i] + tapsToSolve(level, i, rots[i])
+            delay(160)
+        }
         for (i in puzzle.route) {
             val k = tapsToSolve(level, i, rots[i])
             if (k > 0) {
@@ -328,14 +340,24 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             Spacer(Modifier.height(12.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(
-                    onClick = { revealing = true },
-                    enabled = phase == Phase.PLAYING && !revealing,
+                    onClick = {
+                        if (Hints.use(ctx)) {
+                            hints = Hints.state(ctx)
+                            revealing = true
+                        }
+                    },
+                    enabled = phase == Phase.PLAYING && !revealing && hints.first > 0,
                     modifier = Modifier.height(60.dp),
                     shape = RoundedCornerShape(14.dp),
                 ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("💡", fontSize = 18.sp)
-                        Text("Solution", fontSize = 11.sp, color = Color.White)
+                        if (hints.first > 0) {
+                            Text("💡 ${hints.first}", fontSize = 17.sp, color = Color.White)
+                            Text("Solution", fontSize = 11.sp, color = Color.White)
+                        } else {
+                            Text("⏳", fontSize = 16.sp)
+                            Text(formatWait(hints.second), fontSize = 12.sp, color = TextDim)
+                        }
                     }
                 }
                 Button(
