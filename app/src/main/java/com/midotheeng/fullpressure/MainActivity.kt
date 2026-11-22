@@ -189,6 +189,8 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
     var countdown by remember(level.number) { mutableIntStateOf(waterIn) }
     var attempt by remember(level.number) { mutableIntStateOf(0) }
     var stars by remember(level.number) { mutableIntStateOf(0) }
+    var revealing by remember(level.number) { mutableStateOf(false) }
+    var usedSolution by remember(level.number) { mutableStateOf(false) }
     val flowT = remember(level.number) { Animatable(0f) }
 
     fun startWater() {
@@ -203,6 +205,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             moves = 0
         }
         result = null
+        usedSolution = false
         countdown = waterIn
         phase = Phase.PLAYING
         attempt++
@@ -212,7 +215,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
     LaunchedEffect(level.number, attempt) {
         while (countdown > 0 && phase == Phase.PLAYING) {
             delay(1000)
-            if (phase == Phase.PLAYING) countdown--
+            if (phase == Phase.PLAYING && !revealing) countdown--
         }
         startWater()
     }
@@ -226,13 +229,29 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             flowT.animateTo(steps.toFloat(), tween(steps * 230, easing = LinearEasing))
             delay(if (r.won) 1600 else 900)
             if (r.won) {
-                stars = starsFor(moves, puzzle.par)
+                stars = if (usedSolution) 1 else starsFor(moves, puzzle.par)
                 saveStars(ctx, level.number, stars)
             }
             phase = Phase.DONE
         } else if (phase == Phase.PLAYING) {
             flowT.snapTo(0f)
         }
+    }
+
+    // Show the solution: turn each pipe on the route into place, one after another, then run the water.
+    LaunchedEffect(revealing) {
+        if (!revealing) return@LaunchedEffect
+        usedSolution = true
+        for (i in puzzle.route) {
+            val k = tapsToSolve(level, i, rots[i])
+            if (k > 0) {
+                rots[i] = rots[i] + k
+                delay(160)
+            }
+        }
+        delay(500)
+        revealing = false
+        startWater()
     }
 
     val r = result
@@ -291,7 +310,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                                     sides = if (kind == Kind.TANK || kind == Kind.FIXTURE) connectedSides(level, rots, i) else 0,
                                     modifier = Modifier.size(cell),
                                     onTap = {
-                                        if (phase == Phase.PLAYING && kind == Kind.PIPE) {
+                                        if (phase == Phase.PLAYING && !revealing && kind == Kind.PIPE) {
                                             rots[i] = rots[i] + 1
                                             moves++
                                         }
@@ -307,23 +326,36 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             Text(level.hint, color = TextDim, fontSize = 14.sp, textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
-            Button(
-                onClick = { startWater() },
-                enabled = phase == Phase.PLAYING,
-                modifier = Modifier.fillMaxWidth().height(60.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (countdown <= 3) Leak else Water,
-                    disabledContainerColor = Water.copy(alpha = 0.5f),
-                ),
-            ) {
-                if (phase == Phase.PLAYING) {
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                OutlinedButton(
+                    onClick = { revealing = true },
+                    enabled = phase == Phase.PLAYING && !revealing,
+                    modifier = Modifier.height(60.dp),
+                    shape = RoundedCornerShape(14.dp),
+                ) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text("Water in ${countdown}s", fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White)
-                        Text("tap to open the valve now", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                        Text("💡", fontSize = 18.sp)
+                        Text("Solution", fontSize = 11.sp, color = Color.White)
                     }
-                } else {
-                    Text("WATER FLOWING…", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+                Button(
+                    onClick = { startWater() },
+                    enabled = phase == Phase.PLAYING && !revealing,
+                    modifier = Modifier.weight(1f).height(60.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (countdown <= 3) Leak else Water,
+                        disabledContainerColor = Water.copy(alpha = 0.5f),
+                    ),
+                ) {
+                    if (phase == Phase.PLAYING) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Water in ${countdown}s", fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White)
+                            Text("tap to open the valve now", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                        }
+                    } else {
+                        Text("WATER FLOWING…", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
                 }
             }
         }
@@ -332,7 +364,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             ResultCard(
                 won = r?.won == true,
                 stars = stars,
-                message = r?.reason ?: "",
+                message = if (r?.won == true && usedSolution) "Solved with help. Try it yourself for 3 stars!" else r?.reason ?: "",
                 canFix = true,
                 isLast = level.number == LEVELS.size,
                 onNext = onNext,
@@ -445,6 +477,9 @@ fun ResultCard(
                 Text("Flowing!", color = Color.White, fontSize = 28.sp, fontWeight = FontWeight.Black)
                 Spacer(Modifier.height(8.dp))
                 Text(starText(stars), color = Gold, fontSize = 40.sp)
+                if (message.isNotBlank()) {
+                    Text(message, color = TextDim, fontSize = 14.sp, textAlign = TextAlign.Center)
+                }
                 Spacer(Modifier.height(20.dp))
                 Button(
                     onClick = if (isLast) onLevels else onNext,

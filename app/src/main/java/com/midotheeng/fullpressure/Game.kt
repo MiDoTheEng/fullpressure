@@ -211,13 +211,14 @@ fun simulate(level: Level, rots: List<Int>): FlowResult {
     return FlowResult(order, depth, inlet, best, leaks, leakEnds, fixturePressure, reason.isEmpty(), reason)
 }
 
-class Puzzle(val start: List<Int>, val par: Int)
+class Puzzle(val start: List<Int>, val par: Int, val route: List<Int>)
 
 /** Scramble the solved layout so the level starts unsolved. Same layout every time for a level. */
 fun makePuzzle(level: Level): Puzzle {
     val cells = level.cells
     val solved = List(cells.size) { 0 }
-    val path = simulate(level, solved).pressure.keys
+    val solvedFlow = simulate(level, solved)
+    val path = solvedFlow.pressure.keys
     val rnd = Random(level.number * 7919L)
     var rots = solved
     for (attempt in 0 until 50) {
@@ -235,7 +236,7 @@ fun makePuzzle(level: Level): Puzzle {
         val base = cells[i].baseMask
         par += (0..3).first { k -> rotateCW(base, rots[i] + k) == base }
     }
-    return Puzzle(rots, par)
+    return Puzzle(rots, par, solvedFlow.order.filter { cells[it].kind == Kind.PIPE })
 }
 
 fun starsFor(moves: Int, par: Int): Int = when {
@@ -258,4 +259,10 @@ fun connectedSides(level: Level, rots: List<Int>, i: Int): Int {
         if (cell.kind == Kind.PIPE && rotateCW(cell.baseMask, rots[j]) and opposite(d.bit) != 0) sides = sides or d.bit
     }
     return sides
+}
+
+/** Taps (clockwise turns) needed to put pipe [i] into its solved position from rotation [rot]. */
+fun tapsToSolve(level: Level, i: Int, rot: Int): Int {
+    val base = level.cells[i].baseMask
+    return (0..3).first { k -> rotateCW(base, rot + k) == base }
 }
