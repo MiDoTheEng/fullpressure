@@ -31,6 +31,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
@@ -302,19 +303,42 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
 
             // Board
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                val cell = minOf((maxWidth - 4.dp) / level.width, (maxHeight - 4.dp) / level.height)
+                // the roof strip (with the tank) sits above the house
+                val roofRows = 1.15f
+                val cell = minOf((maxWidth - 4.dp) / level.width, (maxHeight - 4.dp) / (level.height + roofRows))
+                val tankCol = level.cells.indexOfFirst { it.kind == Kind.TANK } % level.width
+                val roofLoop = rememberInfiniteTransition(label = "roof")
+                val roofPhase by roofLoop.animateFloat(0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "roofPhase")
+                val drift by roofLoop.animateFloat(0f, 1f, infiniteRepeatable(tween(12000, easing = LinearEasing), RepeatMode.Reverse), label = "drift")
+                val roofFlow by roofLoop.animateFloat(0f, 1f, infiniteRepeatable(tween(420, easing = LinearEasing)), label = "roofFlow")
+                val tankOut = if (phase == Phase.PLAYING) 0f else (t * 2f).coerceIn(0f, 1f)
                 Column(
                     Modifier.clip(RoundedCornerShape(10.dp))
                         .background(boardColor(level.room))
                         .padding(2.dp)
                 ) {
+                    Box(Modifier.size(cell * level.width, cell * roofRows)) {
+                        Canvas(Modifier.fillMaxSize()) {
+                            drawRoof(level.room, cell.toPx(), tankCol, drift)
+                        }
+                        Canvas(
+                            Modifier.offset(x = cell * tankCol, y = cell * (roofRows - 1f)).size(cell)
+                        ) {
+                            drawTank(roofPhase, tankOut, S, tankOut, roofFlow)
+                        }
+                        Text(
+                            "Tank ${level.tankPressure}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.offset(x = cell * tankCol + 2.dp, y = 2.dp)
+                                .clip(RoundedCornerShape(4.dp)).background(Color(0xCC0E1A2B)).padding(horizontal = 4.dp),
+                        )
+                    }
                     for (row in 0 until level.height) {
                         Row {
                             for (col in 0 until level.width) {
                                 val i = row * level.width + col
                                 val kind = level.cells[i].kind
                                 val fill = when {
-                                    kind == Kind.TANK -> if (phase == Phase.PLAYING) 0f else t.coerceIn(0f, 1f)
+                                    kind == Kind.TANK -> if (phase == Phase.PLAYING) 0f else (t * 2f - 1f).coerceIn(0f, 1f)
                                     else -> fillOf(i)
                                 }
                                 TileView(
@@ -460,15 +484,9 @@ fun TileView(
                 drawPipe(rotateCW(cell.baseMask, rot), fill, inlet, flow)
                 if (leakMask != 0) drawLeaks(leakMask, slow)
             }
-            Kind.TANK -> {
-                Canvas(Modifier.fillMaxSize()) {
-                    drawTank(slow, fill, sides, fill, flow)
-                }
-                Text(
-                    "$tank", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp)
-                        .clip(RoundedCornerShape(4.dp)).background(Color(0xCC0E1A2B)).padding(horizontal = 4.dp),
-                )
+            Kind.TANK -> Canvas(Modifier.fillMaxSize()) {
+                // water inlet into the house from the roof tank
+                drawInlet(sides, fill, flow, slow)
             }
             Kind.FIXTURE -> {
                 Canvas(Modifier.fillMaxSize()) {

@@ -1124,3 +1124,79 @@ fun DrawScope.drawDrinkingFountain(active: Boolean, phase: Float) {
     drawLine(Color(0xFFFFA000), p(bx - 0.01f, by + 0.04f), p(bx - 0.01f, by + 0.06f), u(0.01f))
     drawLine(Color(0xFFFFA000), p(bx + 0.02f, by + 0.04f), p(bx + 0.02f, by + 0.06f), u(0.01f))
 }
+
+// ---------- roof strip above the house, and the water inlet ----------
+
+/** Sky and roof slab above the board; the tank stands on the roof over column [tankCol]. */
+fun DrawScope.drawRoof(room: Room, cellPx: Float, tankCol: Int, phase: Float) {
+    drawRect(Brush.verticalGradient(listOf(Color(0xFF7EC8F2), Color(0xFFCDEBFA)), startY = 0f, endY = size.height))
+    // sun and a drifting cloud
+    drawCircle(Color(0x55FFE082), size.height * 0.28f, Offset(size.width * 0.9f, size.height * 0.25f))
+    drawCircle(Color(0xFFFFD54F), size.height * 0.16f, Offset(size.width * 0.9f, size.height * 0.25f))
+    val cx = (size.width * (0.15f + phase * 0.1f))
+    for ((dx, dy, r) in listOf(Triple(0f, 0f, 0.13f), Triple(0.07f, -0.05f, 0.15f), Triple(0.15f, 0f, 0.12f))) {
+        drawCircle(Color(0xEEFFFFFF), size.height * r, Offset(cx + size.height * dx * 2f, size.height * (0.3f + dy)))
+    }
+    // roof slab with parapet
+    val slabTop = size.height * 0.84f
+    val slabColor = when (room) {
+        Room.GARDEN, Room.STREET -> Color(0xFF9E8F7A)
+        else -> Color(0xFFB0AAA0)
+    }
+    drawRect(slabColor, Offset(0f, slabTop), Size(size.width, size.height - slabTop))
+    drawRect(Color(0x33FFFFFF), Offset(0f, slabTop), Size(size.width, size.height * 0.03f))
+    drawRect(Color(0x33000000), Offset(0f, size.height - size.height * 0.03f), Size(size.width, size.height * 0.03f))
+    // parapet blocks
+    var x = 0f
+    while (x < size.width) {
+        drawRect(Color(0x22000000), Offset(x, slabTop), Size(size.height * 0.01f, size.height - slabTop))
+        x += cellPx * 0.5f
+    }
+}
+
+/**
+ * The house's water inlet: the pipe from the roof tank comes down through the ceiling (top edge),
+ * through a stop valve into a water meter, then out to the connected [sides].
+ * [fill] 0..1: first half fills the drop-pipe, second half the outlets.
+ */
+fun DrawScope.drawInlet(sides: Int, fill: Float, flow: Float, phase: Float) {
+    val down = DIRS[0]   // north: comes in from the top edge
+    val outs = DIRS.filter { sides and it.bit != 0 && it.bit != N }
+    armShadow(down, 0f, 1f)
+    for (d in outs) armShadow(d, 0f, 1f)
+    pipeArm(down, 0f, 1f)
+    for (d in outs) pipeArm(d, 0f, 1f)
+    val first = (fill * 2f).coerceIn(0f, 1f)
+    val second = (fill * 2f - 1f).coerceIn(0f, 1f)
+    if (first > 0f) waterLine(armPoint(down, 1f), armPoint(down, 1f - first), flow, front = second == 0f && first < 1f)
+    if (second > 0f) for (d in outs) waterLine(armPoint(d, 0f), armPoint(d, second), flow, front = second < 1f)
+    socket(down)
+    for (d in outs) socket(d)
+    // stop valve on the drop-pipe (blue lever handle)
+    val v = armPoint(down, 0.55f)
+    val t = u(PIPE_THICKNESS)
+    drawRoundRect(Brush.horizontalGradient(listOf(Color(0xFF6E5012), Color(0xFFF0CF77), Color(0xFF6E5012)), startX = v.x - t * 0.7f, endX = v.x + t * 0.7f),
+        Offset(v.x - t * 0.7f, v.y - u(0.05f)), Size(t * 1.4f, u(0.1f)), CornerRadius(u(0.015f)))
+    val open = fill > 0f
+    rotate(if (open) 0f else 90f, v) {
+        drawLine(Color(0xFF1565C0), v, Offset(v.x + u(0.2f), v.y), u(0.045f), cap = StrokeCap.Round)
+    }
+    drawCircle(ChromeMid, u(0.025f), v)
+    // water meter: brass body, white dial, needle spins while water flows
+    val c = center
+    val r = u(0.17f)
+    drawCircle(Color(0x33000000), r, c + Offset(u(0.02f), u(0.03f)))
+    drawCircle(Brush.radialGradient(listOf(Color(0xFFF0CF77), Color(0xFFB38B2C), Color(0xFF6E5012)), center = c - Offset(r * 0.3f, r * 0.3f), radius = r * 1.5f), r, c)
+    drawCircle(Color.White, r * 0.72f, c)
+    drawCircle(Color(0xFF263238), r * 0.72f, c, style = Stroke(u(0.008f)))
+    for (k in 0 until 8) {
+        val a = k * 0.785f
+        drawLine(Color(0xFF263238), c + Offset(kotlin.math.cos(a) * r * 0.55f, kotlin.math.sin(a) * r * 0.55f),
+            c + Offset(kotlin.math.cos(a) * r * 0.66f, kotlin.math.sin(a) * r * 0.66f), u(0.006f))
+    }
+    val needle = if (open) phase * 6.2832f * 2f else -1.57f
+    drawLine(Color(0xFFD32F2F), c, c + Offset(kotlin.math.cos(needle) * r * 0.55f, kotlin.math.sin(needle) * r * 0.55f), u(0.014f), cap = StrokeCap.Round)
+    drawCircle(Color(0xFF263238), u(0.014f), c)
+    // small glass highlight
+    drawArc(Color(0x66FFFFFF), 200f, 60f, false, c - Offset(r * 0.6f, r * 0.6f), Size(r * 1.2f, r * 1.2f), style = Stroke(u(0.01f), cap = StrokeCap.Round))
+}
