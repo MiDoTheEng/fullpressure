@@ -510,80 +510,79 @@ fun DrawScope.drawLeaks(mask: Int, phase: Float) {
 // ---------- main water tank ----------
 
 /**
- * Elevated water tower, side view: steel tank with a cone roof on braced legs,
- * a ladder, a water-drop logo and a sight gauge. [drain] 0..1 lowers the gauge as water leaves.
+ * Rooftop polyethylene water tank (side view) on a concrete base.
+ * The body is translucent so you can see the water level, which drops by [drain] 0..1.
+ * Outlet pipes leave the tank wall through brass tank connectors on each of [sides],
+ * centred so they meet the neighbouring pipe exactly; water runs out along them by [fill].
  */
-fun DrawScope.drawTank(phase: Float, drain: Float) {
-    val steelDark = Color(0xFF3B4752)
-    val steelLight = Color(0xFF8A99A8)
-    // ground shadow
-    drawOval(Color(0x33000000), p(0.12f, 0.86f), sz(0.8f, 0.1f))
-    // back legs (darker, further away)
-    drawLine(steelDark, p(0.38f, 0.5f), p(0.36f, 0.9f), u(0.035f))
-    drawLine(steelDark, p(0.62f, 0.5f), p(0.64f, 0.9f), u(0.035f))
-    // cross bracing
-    val brace = Color(0xFF55626E)
-    drawLine(brace, p(0.21f, 0.56f), p(0.78f, 0.74f), u(0.015f))
-    drawLine(brace, p(0.79f, 0.56f), p(0.22f, 0.74f), u(0.015f))
-    drawLine(brace, p(0.2f, 0.72f), p(0.8f, 0.72f), u(0.015f))
-    // front legs
-    for ((x0, x1) in listOf(0.22f to 0.17f, 0.78f to 0.83f)) {
-        drawLine(Brush.horizontalGradient(listOf(steelDark, steelLight, steelDark), startX = u(x1 - 0.025f), endX = u(x1 + 0.025f)),
-            p(x0, 0.5f), p(x1, 0.9f), u(0.045f))
-        drawRoundRect(Color(0xFFA19B8F), p(x1 - 0.045f, 0.89f), sz(0.09f, 0.04f), CornerRadius(u(0.01f)))
-    }
-    // ladder up the right side
-    drawLine(Color(0xFFB0BCC8), p(0.68f, 0.9f), p(0.68f, 0.3f), u(0.012f))
-    drawLine(Color(0xFFB0BCC8), p(0.74f, 0.9f), p(0.74f, 0.3f), u(0.012f))
-    var ry = 0.86f
-    while (ry > 0.3f) { drawLine(Color(0xFFB0BCC8), p(0.68f, ry), p(0.74f, ry), u(0.01f)); ry -= 0.05f }
-
-    // tank shadow on itself + body (cylinder seen from the side)
+fun DrawScope.drawTank(phase: Float, drain: Float, sides: Int, fill: Float, flow: Float) {
+    // concrete base
+    drawOval(Color(0x2E000000), p(0.14f, 0.87f), sz(0.76f, 0.1f))
+    drawRoundRect(Color(0xFFA9A39A), p(0.16f, 0.84f), sz(0.68f, 0.09f), CornerRadius(u(0.015f)))
+    drawRect(Color(0xFFC9C3B8), p(0.16f, 0.84f), sz(0.68f, 0.025f))
+    // body: domed top, straight sides
     val body = Path().apply {
-        moveTo(u(0.14f), u(0.2f))
-        lineTo(u(0.86f), u(0.2f))
-        lineTo(u(0.86f), u(0.48f))
-        quadraticBezierTo(u(0.5f), u(0.58f), u(0.14f), u(0.48f))
+        moveTo(u(0.2f), u(0.3f))
+        quadraticBezierTo(u(0.2f), u(0.14f), u(0.5f), u(0.13f))
+        quadraticBezierTo(u(0.8f), u(0.14f), u(0.8f), u(0.3f))
+        lineTo(u(0.8f), u(0.82f))
+        quadraticBezierTo(u(0.8f), u(0.86f), u(0.76f), u(0.86f))
+        lineTo(u(0.24f), u(0.86f))
+        quadraticBezierTo(u(0.2f), u(0.86f), u(0.2f), u(0.82f))
         close()
     }
     drawPath(body, Brush.horizontalGradient(
-        listOf(Color(0xFF0F3A66), Color(0xFF2F7BC4), Color(0xFF7FC0F0), Color(0xFF2F7BC4), Color(0xFF0F3A66)),
-        startX = u(0.14f), endX = u(0.86f)))
-    // welded seams with rivets
-    for (y in listOf(0.3f, 0.4f)) {
-        val sag = (y - 0.2f) / 0.28f * 0.0f
-        drawLine(Color(0x55000000), p(0.14f, y + sag), p(0.86f, y + sag), u(0.01f))
-        var x = 0.18f
-        while (x < 0.84f) { drawCircle(Color(0x66FFFFFF), u(0.006f), p(x, y - 0.012f)); x += 0.06f }
-    }
-    // water-drop logo
-    val drop = Path().apply {
-        moveTo(u(0.5f), u(0.24f))
-        cubicTo(u(0.5f), u(0.24f), u(0.42f), u(0.33f), u(0.42f), u(0.37f))
-        cubicTo(u(0.42f), u(0.42f), u(0.58f), u(0.42f), u(0.58f), u(0.37f))
-        cubicTo(u(0.58f), u(0.33f), u(0.5f), u(0.24f), u(0.5f), u(0.24f))
+        listOf(Color(0xFF8C969C), Color(0xFFE9ECEA), Color(0xFFFFFFFF), Color(0xFFD3D8D6), Color(0xFF7E888E)),
+        startX = u(0.2f), endX = u(0.8f)))
+    // water seen through the translucent wall, with a gently moving surface
+    val level = 0.46f + drain * 0.2f
+    val water = Path().apply {
+        moveTo(u(0.21f), u(level))
+        for (k in 0..12) {
+            val x = 0.21f + 0.58f * k / 12f
+            lineTo(u(x), u(level + 0.008f * kotlin.math.sin(k * 1.1f + phase * 6.2832f)))
+        }
+        lineTo(u(0.79f), u(0.82f))
+        quadraticBezierTo(u(0.79f), u(0.85f), u(0.76f), u(0.85f))
+        lineTo(u(0.24f), u(0.85f))
+        quadraticBezierTo(u(0.21f), u(0.85f), u(0.21f), u(0.82f))
         close()
     }
-    drawPath(drop, Color.White)
-    drawCircle(WaterBlue, u(0.012f), p(0.475f, 0.37f))
-    // sight gauge: glass tube showing how full it is
-    drawRoundRect(Color(0xFF0B1F33), p(0.2f, 0.23f), sz(0.05f, 0.24f), CornerRadius(u(0.02f)))
-    val level = 0.27f + drain * 0.12f + 0.004f * kotlin.math.sin(phase * 6.2832f)
-    drawRoundRect(Brush.verticalGradient(listOf(WaterLight, WaterBlue), startY = u(level), endY = u(0.47f)),
-        p(0.205f, level), sz(0.04f, 0.465f - level), CornerRadius(u(0.015f)))
-    drawLine(Color(0x88FFFFFF), p(0.212f, 0.25f), p(0.212f, 0.45f), u(0.006f))
-    // walkway railing around the top
-    drawLine(Color(0xFFCFD8DC), p(0.1f, 0.2f), p(0.9f, 0.2f), u(0.014f))
-    drawLine(Color(0xFFCFD8DC), p(0.1f, 0.14f), p(0.9f, 0.14f), u(0.01f))
-    var px = 0.1f
-    while (px <= 0.91f) { drawLine(Color(0xFFCFD8DC), p(px, 0.14f), p(px, 0.2f), u(0.008f)); px += 0.1f }
-    // cone roof with a vent cap
-    val roof = Path().apply {
-        moveTo(u(0.12f), u(0.2f)); lineTo(u(0.5f), u(0.03f)); lineTo(u(0.88f), u(0.2f)); close()
+    drawPath(water, Brush.horizontalGradient(
+        listOf(Color(0x8C5E8FB0), Color(0x59A9D4F0), Color(0x8C4F7E9E)), startX = u(0.2f), endX = u(0.8f)))
+    // moulded ribs
+    for (y in listOf(0.34f, 0.47f, 0.6f, 0.73f)) {
+        drawLine(Color(0x2E000000), p(0.2f, y), p(0.8f, y), u(0.016f), cap = StrokeCap.Round)
+        drawLine(Color(0x99FFFFFF), p(0.2f, y - 0.015f), p(0.8f, y - 0.015f), u(0.01f), cap = StrokeCap.Round)
     }
-    drawPath(roof, Brush.horizontalGradient(listOf(Color(0xFF263845), Color(0xFF6B8296), Color(0xFF263845)), startX = u(0.12f), endX = u(0.88f)))
-    drawLine(Color(0x33FFFFFF), p(0.5f, 0.04f), p(0.32f, 0.19f), u(0.01f))
-    drawCircle(Color(0xFF263845), u(0.025f), p(0.5f, 0.035f))
+    // maker's label
+    drawRoundRect(Color(0xFF1E5FA8), p(0.38f, 0.62f), sz(0.24f, 0.07f), CornerRadius(u(0.01f)))
+    drawRect(Color.White, p(0.41f, 0.64f), sz(0.13f, 0.012f))
+    drawRect(Color(0xCCFFFFFF), p(0.41f, 0.662f), sz(0.09f, 0.01f))
+    // screw lid
+    drawRoundRect(Brush.horizontalGradient(listOf(Color(0xFF0D3B66), Color(0xFF3D8BD0), Color(0xFF0D3B66)), startX = u(0.38f), endX = u(0.62f)),
+        p(0.38f, 0.09f), sz(0.24f, 0.06f), CornerRadius(u(0.02f)))
+    var gx = 0.41f
+    while (gx < 0.6f) { drawLine(Color(0xFF0A2A4A), p(gx, 0.095f), p(gx, 0.145f), u(0.006f)); gx += 0.03f }
+    // sheen
+    drawLine(Color(0x80FFFFFF), p(0.3f, 0.22f), p(0.3f, 0.8f), u(0.02f), cap = StrokeCap.Round)
+
+    // outlet pipes through brass tank connectors, out to the cell edge
+    for (d in DIRS) {
+        if (sides and d.bit == 0) continue
+        val from = when (d.bit) { E, W -> 0.6f; N -> 0.74f; else -> 0.72f }
+        armShadow(d, from, 1f)
+        pipeArm(d, from, 1f)
+        if (fill > 0f) waterLine(armPoint(d, from), armPoint(d, from + (1f - from) * fill), flow, front = fill < 1f)
+        socket(d)
+        // brass tank connector (bulkhead fitting) at the tank wall
+        val t = u(PIPE_THICKNESS) * 1.2f
+        val horizontal = d.dr == 0
+        val (tl, sz2) = armRect(d, from - 0.04f, from + 0.06f, t)
+        val lo = if (horizontal) tl.y else tl.x
+        drawRect(across(listOf(Color(0xFF6E5012), Color(0xFFF0CF77), Color(0xFFB38B2C), Color(0xFF6E5012)), horizontal, lo, lo + t), tl, sz2)
+        drawRect(Color(0xFF4A350A), tl, sz2, style = Stroke(u(0.008f)))
+    }
 }
 
 // ---------- fixtures ----------
