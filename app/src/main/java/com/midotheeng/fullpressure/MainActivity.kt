@@ -63,7 +63,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
-import kotlin.math.roundToInt
 
 private val Bg = Color(0xFF0E1A2B)
 private val TileBg = Color(0xFF16263B)
@@ -181,8 +180,8 @@ private enum class Phase { PLAYING, FLOWING, DONE }
 fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
     val ctx = LocalContext.current
     val puzzle = remember(level.number) { makePuzzle(level) }
-    // Harder levels (more pipes to turn) get more time: 10 s for the easiest, up to 60 s.
-    val waterIn = remember(level.number) { (6 + puzzle.par * 1.6).roundToInt().coerceIn(10, 60) }
+    // Every level gives 15 seconds before the water starts.
+    val waterIn = 15
     val rots = remember(level.number) { mutableStateListOf<Int>().apply { addAll(puzzle.start) } }
     var moves by remember(level.number) { mutableIntStateOf(0) }
     var phase by remember(level.number) { mutableStateOf(Phase.PLAYING) }
@@ -191,7 +190,6 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
     var attempt by remember(level.number) { mutableIntStateOf(0) }
     var stars by remember(level.number) { mutableIntStateOf(0) }
     val flowT = remember(level.number) { Animatable(0f) }
-    val valveTurn = remember(level.number) { Animatable(0f) }
 
     fun startWater() {
         if (phase != Phase.PLAYING) return
@@ -225,8 +223,6 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
         if (phase == Phase.FLOWING && r != null) {
             val steps = (r.depth.values.maxOrNull() ?: 0) + 2
             flowT.snapTo(0f)
-            valveTurn.snapTo(0f)
-            valveTurn.animateTo(1f, tween(650, easing = FastOutSlowInEasing))
             flowT.animateTo(steps.toFloat(), tween(steps * 230, easing = LinearEasing))
             delay(if (r.won) 1600 else 900)
             if (r.won) {
@@ -236,7 +232,6 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             phase = Phase.DONE
         } else if (phase == Phase.PLAYING) {
             flowT.snapTo(0f)
-            valveTurn.snapTo(0f)
         }
     }
 
@@ -294,11 +289,8 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                                     need = level.need,
                                     tank = level.tankPressure,
                                     sides = if (kind == Kind.TANK || kind == Kind.FIXTURE) connectedSides(level, rots, i) else 0,
-                                    valveTurn = valveTurn.value,
-                                    playing = phase == Phase.PLAYING,
                                     modifier = Modifier.size(cell),
                                     onTap = {
-                                        if (phase == Phase.PLAYING && kind == Kind.TANK) startWater()
                                         if (phase == Phase.PLAYING && kind == Kind.PIPE) {
                                             rots[i] = rots[i] + 1
                                             moves++
@@ -328,7 +320,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                 if (phase == Phase.PLAYING) {
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text("Water in ${countdown}s", fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White)
-                        Text("or tap the red valve to open it now", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                        Text("tap to open the valve now", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
                     }
                 } else {
                     Text("WATER FLOWING…", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -355,8 +347,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
 @Composable
 fun TileView(
     room: Room, index: Int, cell: Cell, rot: Int, fill: Float, inlet: Int, leakMask: Int, delivered: Int?,
-    need: Int, tank: Int, sides: Int, valveTurn: Float, playing: Boolean,
-    modifier: Modifier, onTap: () -> Unit,
+    need: Int, tank: Int, sides: Int, modifier: Modifier, onTap: () -> Unit,
 ) {
     val angle by animateFloatAsState(rot * 90f, tween(180, easing = FastOutSlowInEasing), label = "rot")
     val loop = rememberInfiniteTransition(label = "loop")
@@ -374,7 +365,7 @@ fun TileView(
         modifier
             .padding(if (room == Room.BATHROOM || room == Room.TOWER) 1.dp else 0.dp)
             .clip(RoundedCornerShape(if (room == Room.BATHROOM || room == Room.TOWER) 3.dp else 0.dp))
-            .clickable(enabled = cell.kind == Kind.PIPE || (cell.kind == Kind.TANK && playing)) { onTap() },
+            .clickable(enabled = cell.kind == Kind.PIPE) { onTap() },
         contentAlignment = Alignment.Center,
     ) {
         Canvas(Modifier.fillMaxSize()) {
@@ -392,7 +383,6 @@ fun TileView(
                 Canvas(Modifier.fillMaxSize()) {
                     drawStubs(sides, sides, fill, flow, outward = true)
                     drawTank(slow, fill)
-                    drawGateValves(sides, valveTurn, slow, playing && sides != 0)
                 }
                 Text(
                     "$tank", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black,
