@@ -5,6 +5,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -164,53 +165,61 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
     var moves by remember(level.number) { mutableIntStateOf(0) }
     var phase by remember(level.number) { mutableStateOf(Phase.PLAYING) }
     var result by remember(level.number) { mutableStateOf<FlowResult?>(null) }
-    var revealed by remember(level.number) { mutableIntStateOf(0) }
-    var timeLeft by remember(level.number) { mutableIntStateOf(level.timeLimit ?: 0) }
-    var timedOut by remember(level.number) { mutableStateOf(false) }
+    var countdown by remember(level.number) { mutableIntStateOf(level.waterIn) }
     var attempt by remember(level.number) { mutableIntStateOf(0) }
     var stars by remember(level.number) { mutableIntStateOf(0) }
+    val flowT = remember(level.number) { Animatable(0f) }
 
-    fun restart() {
-        rots.clear(); rots.addAll(puzzle.start)
-        moves = 0; result = null; revealed = 0; timedOut = false
-        timeLeft = level.timeLimit ?: 0
+    fun startWater() {
+        if (phase != Phase.PLAYING) return
+        result = simulate(level, rots.toList())
+        phase = Phase.FLOWING
+    }
+
+    fun restart(keepPipes: Boolean) {
+        if (!keepPipes) {
+            rots.clear(); rots.addAll(puzzle.start)
+            moves = 0
+        }
+        result = null
+        countdown = level.waterIn
         phase = Phase.PLAYING
         attempt++
     }
 
-    // Countdown timer
+    // Countdown: when it reaches zero the water starts by itself.
     LaunchedEffect(level.number, attempt) {
-        if (level.timeLimit == null) return@LaunchedEffect
-        while (timeLeft > 0) {
+        while (countdown > 0 && phase == Phase.PLAYING) {
             delay(1000)
-            if (phase == Phase.PLAYING) timeLeft--
+            if (phase == Phase.PLAYING) countdown--
         }
-        if (phase == Phase.PLAYING) {
-            timedOut = true
-            phase = Phase.DONE
-        }
+        startWater()
     }
 
-    // Water flow animation, then the verdict
+    // Water travels out of the tank one step at a time, then the verdict.
     LaunchedEffect(phase) {
         val r = result
         if (phase == Phase.FLOWING && r != null) {
-            for (k in 1..r.order.size) {
-                revealed = k
-                delay(70)
-            }
-            delay(350)
+            val steps = (r.depth.values.maxOrNull() ?: 0) + 2
+            flowT.snapTo(0f)
+            flowT.animateTo(steps.toFloat(), tween(steps * 450, easing = LinearEasing))
+            delay(if (r.won) 1600 else 900)
             if (r.won) {
                 stars = starsFor(moves, puzzle.par)
                 saveStars(ctx, level.number, stars)
             }
             phase = Phase.DONE
+        } else if (phase == Phase.PLAYING) {
+            flowT.snapTo(0f)
         }
     }
 
     val r = result
-    val position = remember(r) { r?.order?.withIndex()?.associate { it.value to it.index } ?: emptyMap() }
-    fun isWet(i: Int) = (position[i] ?: Int.MAX_VALUE) < revealed
+    val t = flowT.value
+    fun fillOf(i: Int): Float {
+        val d = r?.depth?.get(i) ?: return 0f
+        return (t - d - 1f).coerceIn(0f, 1f)
+    }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -218,13 +227,10 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onBack) { Text("‹ Levels", color = TextDim) }
                 Spacer(Modifier.weight(1f))
-                Text("Level ${level.number} · ${level.room.label}", color = Color.White, fontSize = 17.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                Text("Level ${level.number} · ${level.room.label}", color = Color.White, fontSize = 17.sp,
+                    fontWeight = FontWeight.Bold, maxLines = 1)
                 Spacer(Modifier.weight(1f))
-                Text(
-                    if (level.timeLimit != null) "⏱ ${timeLeft}s" else "",
-                    color = if (level.timeLimit != null && timeLeft <= 10) Leak else TextDim,
-                    fontSize = 16.sp, modifier = Modifier.width(72.dp), textAlign = TextAlign.End,
-                )
+                Spacer(Modifier.width(64.dp))
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp)) {
                 Text("Moves $moves  ·  Par ${puzzle.par}", color = TextDim, fontSize = 14.sp)
@@ -237,27 +243,34 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
                 val cell = minOf((maxWidth - 4.dp) / level.width, (maxHeight - 4.dp) / level.height)
                 Column(
-                    Modifier.clip(RoundedCornerShape(10.dp)).background(if (level.room == Room.BATHROOM) Color(0xFF8E9BA8) else Color(0xFF5A3A20)).padding(2.dp)
+                    Modifier.clip(RoundedCornerShape(10.dp))
+                        .background(if (level.room == Room.BATHROOM) Color(0xFF8E9BA8) else Color(0xFF5A3A20))
+                        .padding(2.dp)
                 ) {
                     for (row in 0 until level.height) {
                         Row {
                             for (col in 0 until level.width) {
                                 val i = row * level.width + col
+                                val kind = level.cells[i].kind
+                                val fill = when {
+                                    kind == Kind.TANK -> if (phase == Phase.PLAYING) 0f else t.coerceIn(0f, 1f)
+                                    else -> fillOf(i)
+                                }
                                 TileView(
                                     room = level.room,
                                     index = i,
                                     cell = level.cells[i],
                                     rot = rots[i],
-                                    wet = isWet(i),
+                                    fill = fill,
+                                    inlet = r?.inlet?.get(i) ?: 0,
                                     leakMask = if (phase == Phase.DONE) r?.leakEnds?.get(i) ?: 0 else 0,
-                                    delivered = if (isWet(i)) r?.fixturePressure?.get(i) else null,
+                                    delivered = if (fill >= 1f) r?.fixturePressure?.get(i) else null,
                                     need = level.need,
                                     tank = level.tankPressure,
-                                    sides = if (level.cells[i].kind == Kind.TANK || level.cells[i].kind == Kind.FIXTURE)
-                                        connectedSides(level, rots, i) else 0,
+                                    sides = if (kind == Kind.TANK || kind == Kind.FIXTURE) connectedSides(level, rots, i) else 0,
                                     modifier = Modifier.size(cell),
                                     onTap = {
-                                        if (phase == Phase.PLAYING && level.cells[i].kind == Kind.PIPE) {
+                                        if (phase == Phase.PLAYING && kind == Kind.PIPE) {
                                             rots[i] = rots[i] + 1
                                             moves++
                                         }
@@ -274,30 +287,36 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                 modifier = Modifier.fillMaxWidth())
             Spacer(Modifier.height(12.dp))
             Button(
-                onClick = {
-                    result = simulate(level, rots.toList())
-                    revealed = 0
-                    phase = Phase.FLOWING
-                },
+                onClick = { startWater() },
                 enabled = phase == Phase.PLAYING,
-                modifier = Modifier.fillMaxWidth().height(56.dp),
+                modifier = Modifier.fillMaxWidth().height(60.dp),
                 shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Water),
-            ) { Text("OPEN VALVE", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White) }
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (countdown <= 3) Leak else Water,
+                    disabledContainerColor = Water.copy(alpha = 0.5f),
+                ),
+            ) {
+                if (phase == Phase.PLAYING) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("Water in ${countdown}s", fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.White)
+                        Text("tap to open the valve now", fontSize = 11.sp, color = Color.White.copy(alpha = 0.8f))
+                    }
+                } else {
+                    Text("WATER FLOWING…", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            }
         }
 
         if (phase == Phase.DONE) {
             ResultCard(
-                won = r?.won == true && !timedOut,
+                won = r?.won == true,
                 stars = stars,
-                message = if (timedOut) "Time's up!" else r?.reason ?: "",
-                canFix = !timedOut,
+                message = r?.reason ?: "",
+                canFix = true,
                 isLast = level.number == LEVELS.size,
                 onNext = onNext,
-                onRestart = { restart() },
-                onFix = {
-                    result = null; revealed = 0; phase = Phase.PLAYING
-                },
+                onRestart = { restart(keepPipes = false) },
+                onFix = { restart(keepPipes = true) },
                 onLevels = onBack,
             )
         }
@@ -306,13 +325,13 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
 
 @Composable
 fun TileView(
-    room: Room, index: Int, cell: Cell, rot: Int, wet: Boolean, leakMask: Int, delivered: Int?,
+    room: Room, index: Int, cell: Cell, rot: Int, fill: Float, inlet: Int, leakMask: Int, delivered: Int?,
     need: Int, tank: Int, sides: Int, modifier: Modifier, onTap: () -> Unit,
 ) {
     val angle by animateFloatAsState(rot * 90f, tween(180, easing = FastOutSlowInEasing), label = "rot")
     val loop = rememberInfiniteTransition(label = "loop")
     val flow by loop.animateFloat(
-        0f, 1f, infiniteRepeatable(tween(700, easing = LinearEasing)), label = "flow",
+        0f, 1f, infiniteRepeatable(tween(600, easing = LinearEasing)), label = "flow",
     )
     val slow by loop.animateFloat(
         0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "slow",
@@ -336,23 +355,23 @@ fun TileView(
             Kind.PIPE -> Canvas(
                 Modifier.fillMaxSize().graphicsLayer { rotationZ = angle - rot * 90f }
             ) {
-                drawPipe(rotateCW(cell.baseMask, rot), wet, flow)
+                drawPipe(rotateCW(cell.baseMask, rot), fill, inlet, flow)
                 if (leakMask != 0) drawLeaks(leakMask, slow)
             }
             Kind.TANK -> {
                 Canvas(Modifier.fillMaxSize()) {
-                    drawStubs(sides, true, flow)
-                    drawTank(wobble)
+                    drawStubs(sides, sides, fill, flow, outward = true)
+                    drawTank(wobble, slow)
                 }
                 Text(
                     "$tank", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black,
-                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp)
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 2.dp)
                         .clip(RoundedCornerShape(4.dp)).background(Color(0xCC0E1A2B)).padding(horizontal = 4.dp),
                 )
             }
             Kind.FIXTURE -> {
                 Canvas(Modifier.fillMaxSize()) {
-                    drawStubs(sides, delivered != null, flow)
+                    drawStubs(sides, inlet, fill, flow)
                     when (cell.fixture) {
                         FixtureType.SINK -> drawBasin(satisfied, slow)
                         FixtureType.SHOWER -> drawShower(satisfied, slow)

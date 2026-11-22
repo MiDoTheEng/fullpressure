@@ -78,7 +78,7 @@ class Level(
     rows: List<String>,
     val tankPressure: Int,
     val need: Int,              // minimum pressure every fixture needs
-    val timeLimit: Int?,        // seconds, or null for no timer
+    val waterIn: Int,           // seconds before the water starts flowing
     val hint: String,
 ) {
     val height = rows.size
@@ -89,6 +89,8 @@ class Level(
 
 class FlowResult(
     val order: List<Int>,                 // cells in the order water reaches them (pipes and fixtures)
+    val depth: Map<Int, Int>,             // how many steps from the tank each wet cell is
+    val inlet: Map<Int, Int>,             // the side water enters each wet cell from
     val pressure: Map<Int, Int>,          // pressure left in each filled pipe
     val leaks: Set<Int>,                  // filled pipes with an open end
     val leakEnds: Map<Int, Int>,          // which sides of each leaking pipe are open
@@ -108,6 +110,8 @@ fun simulate(level: Level, rots: List<Int>): FlowResult {
     val best = HashMap<Int, Int>()
     val order = ArrayList<Int>()
     val fixturePressure = HashMap<Int, Int>()
+    val depth = HashMap<Int, Int>()
+    val inlet = HashMap<Int, Int>()
     val queue = PriorityQueue<IntArray>(compareByDescending<IntArray> { it[0] })
 
     // The tank feeds any neighbouring pipe that faces it.
@@ -122,16 +126,20 @@ fun simulate(level: Level, rots: List<Int>): FlowResult {
             val j = rr * w + cc
             if (cells[j].kind == Kind.PIPE && maskAt(j) and opposite(d.bit) != 0) {
                 val p = level.tankPressure - cells[j].cost
-                if (p > 0) queue.add(intArrayOf(p, j))
+                if (p > 0) queue.add(intArrayOf(p, j, opposite(d.bit), 0))
             }
         }
     }
 
     // Highest pressure wins, like water taking the easiest route.
     while (queue.isNotEmpty()) {
-        val (p, i) = queue.poll()!!.let { it[0] to it[1] }
+        val entry = queue.poll()!!
+        val p = entry[0]
+        val i = entry[1]
         if (best.containsKey(i)) continue
         best[i] = p
+        inlet[i] = entry[2]
+        depth[i] = entry[3]
         order.add(i)
         val r = i / w
         val c = i % w
@@ -144,12 +152,16 @@ fun simulate(level: Level, rots: List<Int>): FlowResult {
             val j = rr * w + cc
             when (cells[j].kind) {
                 Kind.FIXTURE -> {
-                    if (!fixturePressure.containsKey(j)) order.add(j)
+                    if (!fixturePressure.containsKey(j)) {
+                        order.add(j)
+                        inlet[j] = opposite(d.bit)
+                        depth[j] = depth[i]!! + 1
+                    }
                     fixturePressure[j] = maxOf(fixturePressure[j] ?: 0, p)
                 }
                 Kind.PIPE -> if (!best.containsKey(j) && maskAt(j) and opposite(d.bit) != 0) {
                     val q = p - cells[j].cost
-                    if (q > 0) queue.add(intArrayOf(q, j))
+                    if (q > 0) queue.add(intArrayOf(q, j, opposite(d.bit), depth[i]!! + 1))
                 }
                 else -> {}
             }
@@ -187,7 +199,7 @@ fun simulate(level: Level, rots: List<Int>): FlowResult {
         low -> "Not enough pressure. Try a shorter route with fewer bends."
         else -> ""
     }
-    return FlowResult(order, best, leaks, leakEnds, fixturePressure, reason.isEmpty(), reason)
+    return FlowResult(order, depth, inlet, best, leaks, leakEnds, fixturePressure, reason.isEmpty(), reason)
 }
 
 class Puzzle(val start: List<Int>, val par: Int)
