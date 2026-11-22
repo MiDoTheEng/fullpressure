@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Google Play Games project ID (a long number). Get it from Play Console:
+        Grow users > Play Games Services > Setup and management > Configuration.
+        Leave empty until then: cloud save simply stays off.
+    -->
+    <string name="game_services_project_id" translatable="false"></string>
+</resources>

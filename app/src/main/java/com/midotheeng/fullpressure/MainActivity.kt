@@ -1,5 +1,6 @@
 package com.midotheeng.fullpressure
 
+import android.app.Activity
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -87,6 +88,7 @@ private val TextDim = Color(0xFF9AA8BA)
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        CloudSave.init(this)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(primary = Water, background = Bg)) {
                 App()
@@ -99,6 +101,16 @@ private fun prefs(ctx: Context) = ctx.getSharedPreferences("progress", Context.M
 private fun loadStars(ctx: Context, n: Int) = prefs(ctx).getInt("stars_$n", 0)
 private fun saveStars(ctx: Context, n: Int, stars: Int) {
     if (stars > loadStars(ctx, n)) prefs(ctx).edit().putInt("stars_$n", stars).apply()
+}
+
+private fun allStars(ctx: Context): Map<Int, Int> = LEVELS.associate { it.number to loadStars(ctx, it.number) }.filterValues { it > 0 }
+
+/** Merge this phone's progress with Google Play's copy (best stars win) and keep both up to date. */
+private fun syncCloud(activity: Activity, done: () -> Unit = {}) {
+    CloudSave.sync(activity, allStars(activity)) { merged ->
+        for ((n, st) in merged) saveStars(activity, n, st)
+        done()
+    }
 }
 
 @Composable
@@ -123,7 +135,16 @@ fun App() {
 @Composable
 fun LevelSelect(refresh: Int, onPick: (Int) -> Unit) {
     val ctx = LocalContext.current
-    val stars = remember(refresh) { LEVELS.map { loadStars(ctx, it.number) } }
+    val activity = ctx as Activity
+    var cloud by remember { mutableStateOf(CloudSave.Status.OFF) }
+    var cloudTick by remember { mutableIntStateOf(0) }
+    LaunchedEffect(refresh) {
+        CloudSave.check(activity) { st ->
+            cloud = st
+            if (st == CloudSave.Status.CONNECTED) syncCloud(activity) { cloudTick++ }
+        }
+    }
+    val stars = remember(refresh, cloudTick) { LEVELS.map { loadStars(ctx, it.number) } }
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -131,6 +152,17 @@ fun LevelSelect(refresh: Int, onPick: (Int) -> Unit) {
         Spacer(Modifier.height(24.dp))
         Text("FULL PRESSURE", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Black)
         Text("Get water to every fixture", color = TextDim, fontSize = 15.sp)
+        when (cloud) {
+            CloudSave.Status.CONNECTED -> Text("☁ Progress saved to Google Play", color = Ok, fontSize = 13.sp,
+                modifier = Modifier.padding(top = 6.dp))
+            CloudSave.Status.SIGNED_OUT -> TextButton(onClick = {
+                CloudSave.signIn(activity) { st ->
+                    cloud = st
+                    if (st == CloudSave.Status.CONNECTED) syncCloud(activity) { cloudTick++ }
+                }
+            }) { Text("☁ Sign in to Google Play to save your progress", color = Water, fontSize = 13.sp) }
+            CloudSave.Status.OFF -> {}
+        }
         Spacer(Modifier.height(20.dp))
         LEVELS.groupBy { it.room }.forEach { (room, levels) ->
             val got = levels.sumOf { stars[it.number - 1] }
@@ -265,6 +297,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                     else -> starsFor(moves, puzzle.par)
                 }
                 saveStars(ctx, level.number, stars)
+                if (CloudSave.configured(ctx)) syncCloud(ctx as Activity)
             }
             phase = Phase.DONE
         } else if (phase == Phase.PLAYING) {
