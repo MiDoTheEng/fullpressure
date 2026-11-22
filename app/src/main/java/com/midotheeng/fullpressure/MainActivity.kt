@@ -57,6 +57,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -275,7 +276,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
     }
 
     Box(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(16.dp)) {
+        Column(Modifier.fillMaxSize().padding(horizontal = 6.dp, vertical = 10.dp)) {
             // Header
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                 TextButton(onClick = onBack) { Text("‹ Levels", color = TextDim) }
@@ -448,6 +449,8 @@ fun TileView(
             Kind.FIXTURE -> {
                 Canvas(Modifier.fillMaxSize()) {
                     drawStubs(sides, inlet, fill, flow)
+                    // fixtures drawn a little larger so they fill their square
+                    scale(1.12f, center) {
                     when (cell.fixture) {
                         FixtureType.SINK -> drawBasin(satisfied, slow)
                         FixtureType.SHOWER -> drawShower(satisfied, slow)
@@ -461,6 +464,7 @@ fun TileView(
                         FixtureType.HYDRANT -> drawHydrant(satisfied, flow)
                         FixtureType.DRINKING -> drawDrinkingFountain(satisfied, slow)
                         null -> {}
+                    }
                     }
                 }
                 val pill = when {

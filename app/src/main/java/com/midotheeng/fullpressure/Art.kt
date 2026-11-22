@@ -52,12 +52,27 @@ private fun across(colors: List<Color>, horizontal: Boolean, a: Float, b: Float)
     else Brush.horizontalGradient(colors, startX = a, endX = b)
 
 /** Soft drop shadow for a rounded rectangle. */
+/** Soft shadow: a few spreading layers, lighter at the edges, like a real blurred shadow. */
 private fun DrawScope.shadowRect(x: Float, y: Float, w: Float, h: Float, r: Float) {
-    drawRoundRect(Shadow, p(x + 0.03f, y + 0.04f), sz(w, h), CornerRadius(u(r)))
+    for (k in 3 downTo 0) {
+        val g = k * 0.012f
+        drawRoundRect(Color.Black.copy(alpha = 0.07f + (3 - k) * 0.03f), p(x + 0.025f - g, y + 0.035f - g), sz(w + 2 * g, h + 2 * g), CornerRadius(u(r + g)))
+    }
 }
 
 private fun DrawScope.shadowOval(x: Float, y: Float, w: Float, h: Float) {
-    drawOval(Shadow, p(x + 0.03f, y + 0.04f), sz(w, h))
+    for (k in 3 downTo 0) {
+        val g = k * 0.012f
+        drawOval(Color.Black.copy(alpha = 0.07f + (3 - k) * 0.03f), p(x + 0.025f - g, y + 0.035f - g), sz(w + 2 * g, h + 2 * g))
+    }
+}
+
+/** Soft round shadow under a circle centred at ([cx], [cy]). */
+private fun DrawScope.shadowCircle(cx: Float, cy: Float, r: Float) {
+    for (k in 3 downTo 0) {
+        val g = k * 0.012f
+        drawCircle(Color.Black.copy(alpha = 0.07f + (3 - k) * 0.03f), u(r + g), p(cx + 0.025f, cy + 0.035f))
+    }
 }
 
 // ---------- rooms ----------
@@ -287,6 +302,12 @@ private fun DrawScope.pipeArm(d: Dir, from: Float, to: Float) {
     drawRect(across(pvcAcross, horizontal, lo, lo + t), tl, s)
     val side = if (horizontal) Offset(0f, t * 0.28f) else Offset(t * 0.28f, 0f)
     drawLine(Color(0x33FFFFFF), armPoint(d, from) + side, armPoint(d, to) + side, u(0.008f))
+    // printed manufacturer marking along the pipe
+    val print = if (horizontal) Offset(0f, -t * 0.22f) else Offset(-t * 0.22f, 0f)
+    drawLine(
+        Color(0x40FFFFFF), armPoint(d, from) + print, armPoint(d, to) + print, u(0.006f),
+        pathEffect = PathEffect.dashPathEffect(floatArrayOf(u(0.025f), u(0.012f), u(0.008f), u(0.03f))),
+    )
 }
 
 private fun DrawScope.armShadow(d: Dir, from: Float, to: Float) {
@@ -374,6 +395,13 @@ private fun DrawScope.socket(d: Dir) {
     val rim = armPoint(d, 0.82f)
     val edge = if (horizontal) Offset(0f, t / 2) else Offset(t / 2, 0f)
     drawLine(Color(0x66000000), rim - edge, rim + edge, u(0.014f))
+    // moulded ridges on the socket
+    for (f in listOf(0.88f, 0.94f)) {
+        val m = armPoint(d, f)
+        drawLine(Color(0x33000000), m - edge * 0.92f, m + edge * 0.92f, u(0.01f))
+        val hl = if (horizontal) Offset(u(0.008f), 0f) else Offset(0f, u(0.008f))
+        drawLine(Color(0x33FFFFFF), m - edge * 0.92f + hl, m + edge * 0.92f + hl, u(0.006f))
+    }
 }
 
 private fun angleOf(dx: Float, dy: Float): Float =
@@ -587,6 +615,16 @@ fun DrawScope.drawBasin(active: Boolean, phase: Float) {
     drawRoundRect(chrome(0.47f, 0.53f), p(0.47f, 0.27f), sz(0.06f, 0.17f), CornerRadius(u(0.03f)))
     drawLine(ChromeDark, p(0.5f, 0.27f), p(0.63f, 0.22f), u(0.03f), cap = StrokeCap.Round)
     if (active) stream(0.5f, 0.43f, 0.58f)
+    // soap pump on the left corner
+    shadowCircle(0.21f, 0.27f, 0.05f)
+    drawCircle(Brush.radialGradient(listOf(Color(0xFFFFB3C7), Color(0xFFE91E63)), center = p(0.2f, 0.25f), radius = u(0.07f)), u(0.05f), p(0.21f, 0.27f))
+    drawCircle(chrome(0.19f, 0.23f), u(0.022f), p(0.21f, 0.27f))
+    drawLine(ChromeMid, p(0.21f, 0.27f), p(0.27f, 0.27f), u(0.014f), cap = StrokeCap.Round)
+    // toothbrush cup on the right corner
+    shadowCircle(0.79f, 0.27f, 0.05f)
+    drawCircle(Brush.radialGradient(listOf(Color(0xFFB2EBF2), Color(0xFF26A69A)), center = p(0.78f, 0.25f), radius = u(0.07f)), u(0.05f), p(0.79f, 0.27f))
+    drawLine(Color(0xFF42A5F5), p(0.79f, 0.27f), p(0.86f, 0.2f), u(0.016f), cap = StrokeCap.Round)
+    drawLine(Color(0xFFFFCA28), p(0.79f, 0.27f), p(0.73f, 0.19f), u(0.016f), cap = StrokeCap.Round)
 }
 
 /** Walk-in shower tray with a ceiling rain head, seen from above. */
@@ -625,6 +663,13 @@ fun DrawScope.drawShower(active: Boolean, phase: Float) {
         drawCircle(Color(0xFF55606C), u(0.009f), p(0.5f + r * kotlin.math.cos(a), 0.42f + r * kotlin.math.sin(a)))
     }
     drawCircle(Color(0xFF55606C), u(0.009f), p(0.5f, 0.42f))
+    // shampoo bottle and soap bar in the corner
+    shadowRect(0.7f, 0.66f, 0.1f, 0.14f, 0.02f)
+    drawRoundRect(Brush.horizontalGradient(listOf(Color(0xFF6A1B9A), Color(0xFFBA68C8), Color(0xFF6A1B9A)), startX = u(0.7f), endX = u(0.8f)), p(0.7f, 0.66f), sz(0.1f, 0.14f), CornerRadius(u(0.025f)))
+    drawRoundRect(Color(0xFFEEEEEE), p(0.72f, 0.62f), sz(0.06f, 0.05f), CornerRadius(u(0.01f)))
+    shadowRect(0.18f, 0.7f, 0.12f, 0.08f, 0.03f)
+    drawRoundRect(Brush.verticalGradient(listOf(Color(0xFFFFF59D), Color(0xFFFBC02D)), startY = u(0.7f), endY = u(0.78f)), p(0.18f, 0.7f), sz(0.12f, 0.08f), CornerRadius(u(0.03f)))
+    if (active) for (k in 0 until 3) drawCircle(Color.White.copy(alpha = 0.85f), u(0.012f + k * 0.006f), p(0.21f + k * 0.035f, 0.69f - (k % 2) * 0.02f))
 }
 
 /** Bathtub, seen from above. */
@@ -642,6 +687,14 @@ fun DrawScope.drawBathtub(active: Boolean, phase: Float) {
             p(0.19f, 0.25f), sz(0.62f, 0.5f), CornerRadius(u(0.22f)),
         )
         ripple(0.3f, 0.5f, phase, 0.16f)
+        // bubble-bath foam along the sides
+        for (k in 0 until 14) {
+            val x = 0.22f + (k % 7) * 0.09f
+            val y = if (k < 7) 0.29f else 0.71f
+            val wob = 0.006f * kotlin.math.sin(phase * 6.2832f + k)
+            drawCircle(Color.White.copy(alpha = 0.9f), u(0.03f + (k % 3) * 0.012f + wob), p(x, y))
+            drawCircle(Color(0x33A6E3FF), u(0.012f), p(x - 0.008f, y - 0.008f))
+        }
     }
     drawCircle(Color(0xFF5B6673), u(0.022f), p(0.72f, 0.5f))
     // rubber duck: sits in the empty tub, floats and bobs when it fills
@@ -687,6 +740,14 @@ fun DrawScope.drawKitchenSink(active: Boolean, phase: Float) {
             drawCircle(Color.White.copy(alpha = 1f - q), u(0.008f + q * 0.012f), p(x, y))
         }
     }
+    // washing-up liquid and a sponge on the drainer
+    shadowRect(0.19f, 0.32f, 0.1f, 0.18f, 0.03f)
+    drawRoundRect(Brush.horizontalGradient(listOf(Color(0xFF1B5E20), Color(0xFF81C784), Color(0xFF2E7D32)), startX = u(0.19f), endX = u(0.29f)), p(0.19f, 0.32f), sz(0.1f, 0.18f), CornerRadius(u(0.03f)))
+    drawRoundRect(Color(0xFFFFFFFF), p(0.215f, 0.28f), sz(0.05f, 0.05f), CornerRadius(u(0.01f)))
+    drawRoundRect(Color(0xFFFFF59D), p(0.205f, 0.38f), sz(0.07f, 0.06f), CornerRadius(u(0.01f)))
+    shadowRect(0.18f, 0.56f, 0.14f, 0.1f, 0.02f)
+    drawRoundRect(Color(0xFFFFEB3B), p(0.18f, 0.56f), sz(0.14f, 0.1f), CornerRadius(u(0.02f)))
+    drawRoundRect(Color(0xFF43A047), p(0.18f, 0.56f), sz(0.14f, 0.035f), CornerRadius(u(0.015f)))
     // pull-down tap from behind
     drawCircle(chrome(0.56f, 0.68f), u(0.05f), p(0.62f, 0.2f))
     drawLine(ChromeMid, p(0.62f, 0.2f), p(0.62f, 0.4f), u(0.035f), cap = StrokeCap.Round)
@@ -939,6 +1000,11 @@ fun DrawScope.drawFountain(active: Boolean, phase: Float) {
         else Brush.radialGradient(listOf(Color(0xFF6E8796), Color(0xFF4A5D6A)), center = c, radius = u(0.34f)),
         u(0.33f), c,
     )
+    // wishing coins at the bottom
+    for ((cx, cy) in listOf(0.34f to 0.42f, 0.62f to 0.36f, 0.66f to 0.62f, 0.4f to 0.64f, 0.56f to 0.7f)) {
+        drawCircle(Color(0xFFC9A227).copy(alpha = if (active) 0.7f else 0.9f), u(0.025f), p(cx, cy))
+        drawCircle(Color(0x66FFF3B0), u(0.01f), p(cx - 0.006f, cy - 0.006f))
+    }
     drawCircle(Color(0xFFC9C1B2), u(0.08f), c)
     if (active) {
         for (k in 0 until 3) {
