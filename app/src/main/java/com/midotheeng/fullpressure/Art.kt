@@ -12,6 +12,8 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
+import androidx.compose.ui.graphics.drawscope.rotate
 
 // ---------- palette ----------
 val WaterBlue = Color(0xFF3FA9F5)
@@ -605,6 +607,10 @@ fun DrawScope.drawBathtub(active: Boolean, phase: Float) {
         ripple(0.3f, 0.5f, phase, 0.16f)
     }
     drawCircle(Color(0xFF5B6673), u(0.022f), p(0.72f, 0.5f))
+    // rubber duck: sits in the empty tub, floats and bobs when it fills
+    val dx = if (active) 0.04f * kotlin.math.sin(phase * 6.2832f) else 0f
+    val dy = if (active) 0.012f * kotlin.math.sin(phase * 12.566f) else 0f
+    drawRubberDuck(0.56f + dx, 0.52f + dy, if (active) 6f * kotlin.math.sin(phase * 6.2832f) else 0f)
     // tap at the end
     drawRoundRect(chrome(0.1f, 0.2f), p(0.11f, 0.44f), sz(0.08f, 0.12f), CornerRadius(u(0.03f)))
     drawLine(ChromeMid, p(0.17f, 0.5f), p(0.27f, 0.5f), u(0.035f), cap = StrokeCap.Round)
@@ -626,15 +632,94 @@ fun DrawScope.drawKitchenSink(active: Boolean, phase: Float) {
         Brush.radialGradient(listOf(Color(0xFFC9D2DB), Color(0xFF6C7B8B)), center = p(0.62f, 0.53f), radius = u(0.26f)),
         p(0.44f, 0.3f), sz(0.36f, 0.44f), CornerRadius(u(0.06f)),
     )
-    if (active) {
-        drawRoundRect(WaterBlue.copy(alpha = 0.45f), p(0.47f, 0.4f), sz(0.3f, 0.3f), CornerRadius(u(0.05f)))
-        ripple(0.62f, 0.55f, phase, 0.1f)
-    }
     drawCircle(Color(0xFF4A5560), u(0.025f), p(0.62f, 0.55f))
+    if (active) {
+        drawRoundRect(WaterBlue.copy(alpha = 0.45f), p(0.47f, 0.34f), sz(0.3f, 0.37f), CornerRadius(u(0.05f)))
+        ripple(0.62f, 0.52f, phase, 0.1f)
+    }
+    // fruit waiting to be washed; it bobs and shines when the water runs
+    fun bob(k: Int) = if (active) 0.012f * kotlin.math.sin(phase * 6.2832f + k * 1.7f) else 0f
+    drawApple(0.52f, 0.41f + bob(0))
+    drawOrange(0.72f, 0.42f + bob(1))
+    drawLemon(0.54f, 0.64f + bob(2))
+    drawStrawberry(0.71f, 0.64f + bob(3))
+    if (active) {
+        for (k in 0 until 6) {
+            val q = (phase * 2f + k / 6f) % 1f
+            val (x, y) = listOf(0.5f to 0.38f, 0.74f to 0.39f, 0.56f to 0.61f, 0.69f to 0.61f, 0.55f to 0.44f, 0.7f to 0.46f)[k]
+            drawCircle(Color.White.copy(alpha = 1f - q), u(0.008f + q * 0.012f), p(x, y))
+        }
+    }
     // pull-down tap from behind
     drawCircle(chrome(0.56f, 0.68f), u(0.05f), p(0.62f, 0.2f))
-    drawLine(ChromeMid, p(0.62f, 0.2f), p(0.62f, 0.42f), u(0.035f), cap = StrokeCap.Round)
-    if (active) stream(0.62f, 0.42f, 0.55f)
+    drawLine(ChromeMid, p(0.62f, 0.2f), p(0.62f, 0.4f), u(0.035f), cap = StrokeCap.Round)
+    if (active) stream(0.62f, 0.4f, 0.5f)
+}
+
+private fun DrawScope.drawRubberDuck(x: Float, y: Float, tilt: Float) {
+    rotate(tilt, p(x, y)) {
+        drawOval(Color(0x33000000), p(x - 0.11f + 0.015f, y - 0.06f + 0.02f), sz(0.22f, 0.14f))
+        // body
+        drawOval(Brush.radialGradient(listOf(Color(0xFFFFF176), Color(0xFFFFD600), Color(0xFFF9A825)), center = p(x - 0.03f, y - 0.03f), radius = u(0.15f)),
+            p(x - 0.11f, y - 0.06f), sz(0.22f, 0.14f))
+        // tail
+        val tail = Path().apply {
+            moveTo(u(x + 0.09f), u(y - 0.03f)); lineTo(u(x + 0.14f), u(y - 0.07f)); lineTo(u(x + 0.11f), u(y + 0.01f)); close()
+        }
+        drawPath(tail, Color(0xFFFFD600))
+        // wing
+        drawOval(Color(0xFFF9A825), p(x - 0.01f, y - 0.03f), sz(0.09f, 0.05f))
+        // head
+        drawCircle(Brush.radialGradient(listOf(Color(0xFFFFF59D), Color(0xFFFFD600)), center = p(x - 0.09f, y - 0.1f), radius = u(0.08f)), u(0.06f), p(x - 0.07f, y - 0.07f))
+        // beak
+        drawOval(Color(0xFFFF7043), p(x - 0.165f, y - 0.075f), sz(0.06f, 0.03f))
+        // eye
+        drawCircle(Color(0xFF212121), u(0.012f), p(x - 0.085f, y - 0.085f))
+        drawCircle(Color.White, u(0.004f), p(x - 0.088f, y - 0.088f))
+    }
+}
+
+private fun DrawScope.drawApple(x: Float, y: Float) {
+    drawCircle(Color(0x33000000), u(0.07f), p(x + 0.01f, y + 0.015f))
+    drawCircle(Brush.radialGradient(listOf(Color(0xFFFF6B6B), Color(0xFFD32F2F), Color(0xFF8E1B1B)), center = p(x - 0.02f, y - 0.02f), radius = u(0.09f)), u(0.065f), p(x, y))
+    drawLine(Color(0xFF5D4037), p(x, y - 0.055f), p(x + 0.01f, y - 0.085f), u(0.012f), cap = StrokeCap.Round)
+    drawOval(Color(0xFF43A047), p(x + 0.012f, y - 0.09f), sz(0.045f, 0.022f))
+    drawCircle(Color(0xAAFFFFFF), u(0.014f), p(x - 0.025f, y - 0.02f))
+}
+
+private fun DrawScope.drawOrange(x: Float, y: Float) {
+    drawCircle(Color(0x33000000), u(0.068f), p(x + 0.01f, y + 0.015f))
+    drawCircle(Brush.radialGradient(listOf(Color(0xFFFFCC80), Color(0xFFFF9800), Color(0xFFE65100)), center = p(x - 0.02f, y - 0.02f), radius = u(0.09f)), u(0.063f), p(x, y))
+    for (k in 0 until 6) {
+        val a = k * 1.047f
+        drawCircle(Color(0x33A84300), u(0.005f), p(x + 0.035f * kotlin.math.cos(a), y + 0.035f * kotlin.math.sin(a)))
+    }
+    drawCircle(Color(0xFF7CB342), u(0.01f), p(x, y - 0.045f))
+}
+
+private fun DrawScope.drawLemon(x: Float, y: Float) {
+    drawOval(Color(0x33000000), p(x - 0.065f + 0.01f, y - 0.045f + 0.015f), sz(0.13f, 0.09f))
+    drawOval(Brush.radialGradient(listOf(Color(0xFFFFF59D), Color(0xFFFDD835), Color(0xFFC6A700)), center = p(x - 0.02f, y - 0.015f), radius = u(0.09f)), p(x - 0.065f, y - 0.045f), sz(0.13f, 0.09f))
+    drawCircle(Color(0xFFFDD835), u(0.012f), p(x - 0.07f, y))
+    drawCircle(Color(0xFFFDD835), u(0.012f), p(x + 0.07f, y))
+    drawCircle(Color(0x99FFFFFF), u(0.012f), p(x - 0.025f, y - 0.018f))
+}
+
+private fun DrawScope.drawStrawberry(x: Float, y: Float) {
+    val berry = Path().apply {
+        moveTo(u(x - 0.055f), u(y - 0.035f))
+        quadraticBezierTo(u(x), u(y - 0.06f), u(x + 0.055f), u(y - 0.035f))
+        quadraticBezierTo(u(x + 0.05f), u(y + 0.04f), u(x), u(y + 0.07f))
+        quadraticBezierTo(u(x - 0.05f), u(y + 0.04f), u(x - 0.055f), u(y - 0.035f))
+        close()
+    }
+    drawPath(berry, Brush.radialGradient(listOf(Color(0xFFFF5252), Color(0xFFC62828)), center = p(x - 0.015f, y - 0.01f), radius = u(0.08f)))
+    for (k in 0 until 7) {
+        val sx = x - 0.03f + (k % 3) * 0.03f
+        val sy = y - 0.015f + (k / 3) * 0.025f
+        drawCircle(Color(0xFFFFE082), u(0.005f), p(sx, sy))
+    }
+    for (k in -1..1) drawLine(Color(0xFF2E7D32), p(x, y - 0.045f), p(x + k * 0.03f, y - 0.065f), u(0.014f), cap = StrokeCap.Round)
 }
 
 /** Dishwasher, front panel. */
@@ -673,19 +758,75 @@ fun DrawScope.drawWasher(active: Boolean, phase: Float) {
     drawCircle(chrome(0.66f, 0.78f), u(0.05f), p(0.72f, 0.16f))
     drawRoundRect(if (active) Color(0xFF3DD68C) else Color(0xFF4A5560), p(0.2f, 0.13f), sz(0.18f, 0.06f), CornerRadius(u(0.015f)))
     // door
-    drawCircle(chrome(0.24f, 0.76f), u(0.25f), p(0.5f, 0.57f))
-    drawCircle(Color(0xFF1C2A38), u(0.2f), p(0.5f, 0.57f))
-    if (active) {
-        drawCircle(WaterBlue.copy(alpha = 0.7f), u(0.19f), p(0.5f, 0.6f))
-        drawArc(
-            Color.White.copy(alpha = 0.8f), startAngle = phase * 360f, sweepAngle = 220f, useCenter = false,
-            topLeft = p(0.37f, 0.44f), size = sz(0.26f, 0.26f), style = Stroke(u(0.03f), cap = StrokeCap.Round),
-        )
-        drawArc(
-            WaterLight.copy(alpha = 0.8f), startAngle = phase * 360f + 180f, sweepAngle = 140f, useCenter = false,
-            topLeft = p(0.42f, 0.49f), size = sz(0.16f, 0.16f), style = Stroke(u(0.02f), cap = StrokeCap.Round),
-        )
+    val c = p(0.5f, 0.57f)
+    val r = u(0.2f)
+    drawCircle(chrome(0.24f, 0.76f), u(0.25f), c)
+    drawCircle(Color(0xFF1C2A38), r, c)
+    clipPath(Path().apply { addOval(Rect(c, r)) }) {
+        // drum holes
+        for (k in 0 until 12) {
+            val a = k * 0.5236f
+            drawCircle(Color(0xFF2C3E50), u(0.012f), Offset(c.x + kotlin.math.cos(a) * r * 0.85f, c.y + kotlin.math.sin(a) * r * 0.85f))
+        }
+        if (active) {
+            // soapy water sloshing in the bottom of the drum
+            val wave = Path().apply {
+                moveTo(c.x - r, c.y + r)
+                lineTo(c.x - r, c.y + r * 0.1f)
+                for (k in 0..12) {
+                    val x = c.x - r + 2 * r * k / 12f
+                    lineTo(x, c.y + r * 0.1f + r * 0.08f * kotlin.math.sin(k * 0.9f + phase * 12.566f))
+                }
+                lineTo(c.x + r, c.y + r)
+                close()
+            }
+            drawPath(wave, WaterBlue.copy(alpha = 0.75f))
+        }
+        // clothes tumble round with the drum; when it's still they lie at the bottom
+        rotate(if (active) phase * 720f else 0f, c) {
+            // red T-shirt
+            val shirt = Path().apply {
+                val x = c.x - r * 0.45f
+                val y = c.y + r * 0.25f
+                val w = r * 0.42f
+                moveTo(x - w * 0.5f, y - w * 0.45f)
+                lineTo(x - w * 0.95f, y - w * 0.15f)
+                lineTo(x - w * 0.75f, y + w * 0.1f)
+                lineTo(x - w * 0.5f, y)
+                lineTo(x - w * 0.5f, y + w * 0.6f)
+                lineTo(x + w * 0.5f, y + w * 0.6f)
+                lineTo(x + w * 0.5f, y)
+                lineTo(x + w * 0.75f, y + w * 0.1f)
+                lineTo(x + w * 0.95f, y - w * 0.15f)
+                lineTo(x + w * 0.5f, y - w * 0.45f)
+                lineTo(x + w * 0.15f, y - w * 0.45f)
+                quadraticBezierTo(x, y - w * 0.25f, x - w * 0.15f, y - w * 0.45f)
+                close()
+            }
+            drawPath(shirt, Color(0xFFE53935))
+            drawPath(shirt, Color(0xFF8E1B1B), style = Stroke(u(0.006f)))
+            // blue sock with a white heel
+            drawRoundRect(Color(0xFF1E88E5), Offset(c.x + r * 0.05f, c.y + r * 0.45f), Size(r * 0.55f, r * 0.2f), CornerRadius(r * 0.1f))
+            drawRoundRect(Color(0xFF1E88E5), Offset(c.x + r * 0.45f, c.y + r * 0.2f), Size(r * 0.2f, r * 0.4f), CornerRadius(r * 0.1f))
+            drawCircle(Color.White, r * 0.08f, Offset(c.x + r * 0.12f, c.y + r * 0.55f))
+            // yellow towel with stripes
+            drawRoundRect(Color(0xFFFFC93C), Offset(c.x - r * 0.15f, c.y + r * 0.55f), Size(r * 0.5f, r * 0.3f), CornerRadius(r * 0.05f))
+            drawLine(Color(0xFFFF8A1F), Offset(c.x - r * 0.15f, c.y + r * 0.65f), Offset(c.x + r * 0.35f, c.y + r * 0.65f), r * 0.05f)
+            drawLine(Color(0xFFFF8A1F), Offset(c.x - r * 0.15f, c.y + r * 0.76f), Offset(c.x + r * 0.35f, c.y + r * 0.76f), r * 0.05f)
+            // green shorts
+            drawRoundRect(Color(0xFF43A047), Offset(c.x + r * 0.3f, c.y - r * 0.15f), Size(r * 0.35f, r * 0.25f), CornerRadius(r * 0.05f))
+            drawLine(Color(0xFF1B5E20), Offset(c.x + r * 0.475f, c.y - r * 0.05f), Offset(c.x + r * 0.475f, c.y + r * 0.1f), r * 0.04f)
+        }
+        if (active) {
+            // foam
+            for (k in 0 until 7) {
+                val q = (phase * 2f + k / 7f) % 1f
+                drawCircle(Color.White.copy(alpha = 0.85f - q * 0.5f), r * (0.06f + (k % 3) * 0.03f),
+                    Offset(c.x - r * 0.8f + k * r * 0.27f, c.y + r * 0.1f - q * r * 0.15f))
+            }
+        }
     }
+    drawCircle(Color(0xFF8E99A5), r, c, style = Stroke(u(0.015f)))
     drawArc(Color(0x55FFFFFF), 200f, 70f, false, p(0.33f, 0.4f), sz(0.34f, 0.34f), style = Stroke(u(0.02f), cap = StrokeCap.Round))
 }
 
