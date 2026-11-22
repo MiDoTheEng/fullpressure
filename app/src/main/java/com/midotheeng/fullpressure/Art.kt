@@ -95,6 +95,47 @@ fun DrawScope.drawFloor(room: Room, index: Int) {
                 drawLine(Color(0x55452710), Offset(jx, k * plank), Offset(jx, (k + 1) * plank), u(0.012f))
             }
         }
+        Room.GARDEN -> {
+            drawRect(Brush.linearGradient(
+                listOf(Color(0xFF5E9E3A), Color(0xFF4A8A2E)),
+                start = Offset.Zero, end = Offset(size.width, size.height),
+            ))
+            // grass blades
+            for (k in 0 until 40) {
+                val x = ((k * 37 + index * 13) % 100) / 100f
+                val y = ((k * 53 + index * 29) % 100) / 100f
+                val c = if (k % 3 == 0) Color(0x5582C95A) else if (k % 3 == 1) Color(0x44396E22) else Color(0x3399DD70)
+                drawLine(c, p(x, y), p(x + ((k % 5) - 2) * 0.01f, y - 0.05f), u(0.012f), cap = StrokeCap.Round)
+            }
+        }
+        Room.VILLA -> {
+            // light oak parquet in 2x2 blocks, alternating direction
+            val tones = listOf(Color(0xFFE2C49A), Color(0xFFD6B386), Color(0xFFE8CDA6))
+            val half = size.width / 2f
+            for (by in 0..1) for (bx in 0..1) {
+                val vertical = (bx + by + index) % 2 == 0
+                for (k in 0 until 3) {
+                    val tone = tones[(k + bx + by * 2 + index) % 3]
+                    val tl = if (vertical) Offset(bx * half + k * half / 3f, by * half) else Offset(bx * half, by * half + k * half / 3f)
+                    val sz2 = if (vertical) Size(half / 3f, half) else Size(half, half / 3f)
+                    drawRect(tone, tl, sz2)
+                    drawRect(Color(0x339A7246), tl, sz2, style = Stroke(u(0.006f)))
+                }
+            }
+        }
+        Room.TOWER -> {
+            // polished concrete with a window reflection
+            drawRect(Brush.linearGradient(
+                listOf(Color(0xFFB9BFC6), Color(0xFF9AA2AB)),
+                start = Offset.Zero, end = Offset(size.width, size.height),
+            ))
+            for (k in 0 until 10) {
+                val x = ((k * 41 + index * 17) % 100) / 100f
+                val y = ((k * 67 + index * 7) % 100) / 100f
+                drawCircle(Color(0x22000000), u(0.008f + (k % 3) * 0.004f), p(x, y))
+            }
+            drawLine(Color(0x33FFFFFF), p(0.0f, 0.75f), p(0.75f, 0.0f), u(0.12f))
+        }
     }
 }
 
@@ -130,6 +171,51 @@ fun DrawScope.drawWall(room: Room, index: Int) {
                 drawCircle(c, u(0.012f + (k % 4) * 0.004f), p(x, y))
             }
             drawLine(Color(0x33FFFFFF), p(0.06f, 0.08f), p(0.5f, 0.08f), u(0.02f), cap = StrokeCap.Round)
+        }
+        Room.GARDEN -> {
+            // clipped hedge
+            drawRect(Color(0xFF1F4A1A))
+            for (k in 0 until 14) {
+                val x = 0.12f + ((k * 37 + index * 5) % 76) / 100f
+                val y = 0.12f + ((k * 53 + index * 11) % 76) / 100f
+                drawCircle(
+                    Brush.radialGradient(listOf(Color(0xFF5FA441), Color(0xFF2C6A22)), center = p(x - 0.04f, y - 0.04f), radius = u(0.2f)),
+                    u(0.16f), p(x, y),
+                )
+            }
+            for (k in 0 until 8) {
+                val x = ((k * 29 + index * 3) % 100) / 100f
+                val y = ((k * 71 + index * 13) % 100) / 100f
+                drawCircle(Color(0x5599E070), u(0.02f), p(x, y))
+            }
+        }
+        Room.VILLA -> {
+            // wall in plan view: solid with hatching, like a drawing
+            drawRect(Color(0xFFEDE6DA))
+            drawRect(Color(0xFF6B6157), style = Stroke(u(0.03f)))
+            var x = -1f
+            while (x < 1f) {
+                drawLine(Color(0x886B6157), p(x, 1f), p(x + 1f, 0f), u(0.015f))
+                x += 0.16f
+            }
+        }
+        Room.TOWER -> {
+            // floor-to-ceiling glass with the city behind it
+            drawRect(Brush.verticalGradient(listOf(Color(0xFF6FB6E8), Color(0xFFBEE3F7)), startY = 0f, endY = size.height))
+            val heights = listOf(0.55f, 0.35f, 0.7f, 0.45f, 0.6f, 0.3f)
+            for (k in 0 until 6) {
+                val h = heights[(k + index) % heights.size]
+                val x = k * 0.18f - 0.04f
+                drawRect(Color(0xFF5C7D99), p(x, 1f - h), sz(0.15f, h))
+                for (wy in 0 until 6) {
+                    val y = 1f - h + 0.06f + wy * 0.09f
+                    if (y < 0.97f) drawRect(Color(0x66FFF4C2), p(x + 0.03f, y), sz(0.03f, 0.03f))
+                }
+            }
+            // mullions and glare
+            drawRect(Color(0xFF39434E), style = Stroke(u(0.06f)))
+            drawLine(Color(0xFF39434E), p(0.5f, 0f), p(0.5f, 1f), u(0.03f))
+            drawLine(Color(0x55FFFFFF), p(0.1f, 0.9f), p(0.4f, 0.1f), u(0.05f))
         }
     }
 }
@@ -169,16 +255,19 @@ private fun DrawScope.armShadow(d: Dir, from: Float, to: Float) {
     drawRect(Shadow, tl, s)
 }
 
-/** Realistic water along [path]: dark body, bright core, bubbles carried along, foamy front. */
-private fun DrawScope.waterPath(path: Path, flow: Float, front: Boolean) {
+/**
+ * Realistic water along [path]: dark body, bright core, bubbles carried along, foamy front.
+ * [core] lets the fast-moving core and bubbles take a different line (the outside of a bend).
+ */
+private fun DrawScope.waterPath(path: Path, flow: Float, front: Boolean, core: Path = path) {
     val t = u(PIPE_THICKNESS)
     val measure = PathMeasure()
-    measure.setPath(path, false)
+    measure.setPath(core, false)
     val len = measure.length
     if (len < 0.5f) return
     drawPath(path, WaterDeep, style = Stroke(t * 0.56f, cap = StrokeCap.Butt))
     drawPath(path, WaterBlue, style = Stroke(t * 0.42f, cap = StrokeCap.Butt))
-    drawPath(path, WaterLight.copy(alpha = 0.55f), style = Stroke(t * 0.14f, cap = StrokeCap.Butt))
+    drawPath(core, WaterLight.copy(alpha = 0.55f), style = Stroke(t * 0.14f, cap = StrokeCap.Butt))
     // bubbles drifting with the flow, at different sizes and lanes
     val count = 8
     val spacing = u(0.09f)
@@ -189,7 +278,7 @@ private fun DrawScope.waterPath(path: Path, flow: Float, front: Boolean) {
         if (dist <= len) {
             val pos = measure.getPosition(dist)
             val tan = measure.getTangent(dist)
-            val lane = ((k * 7) % 5 - 2) * t * 0.06f
+            val lane = ((k * 7) % 5 - 2) * t * 0.05f
             val off = Offset(-tan.y * lane, tan.x * lane)
             val r = t * (0.035f + (k % 3) * 0.02f)
             drawCircle(Color.White.copy(alpha = 0.75f), r, pos + off)
@@ -197,11 +286,35 @@ private fun DrawScope.waterPath(path: Path, flow: Float, front: Boolean) {
         k++
     }
     if (front) {
-        // the advancing water front: rounded, with foam
+        // the advancing front: rounded, foamy, with spray just ahead of it
         val end = measure.getPosition(len)
+        val tan = measure.getTangent(len)
         drawCircle(WaterBlue, t * 0.24f, end)
         drawCircle(Color.White.copy(alpha = 0.55f + 0.3f * flow), t * 0.16f, end)
-        drawCircle(WaterLight, t * 0.08f, end)
+        for (k2 in 0 until 3) {
+            val q = (flow + k2 / 3f) % 1f
+            val side = (k2 - 1) * t * 0.12f
+            val pos = end + tan * (t * (0.1f + q * 0.22f)) + Offset(-tan.y * side, tan.x * side)
+            drawCircle(WaterLight.copy(alpha = 1f - q), t * 0.05f, pos)
+        }
+    }
+}
+
+/** Swirling water where flows meet or split (tees and crosses). */
+private fun DrawScope.turbulence(flow: Float) {
+    val t = u(PIPE_THICKNESS)
+    drawCircle(WaterBlue, t * 0.34f, center)
+    for (k in 0 until 3) {
+        drawArc(
+            Color.White.copy(alpha = 0.6f), flow * 360f * 1.5f + k * 120f, 70f, false,
+            Offset(center.x - t * 0.22f, center.y - t * 0.22f), Size(t * 0.44f, t * 0.44f),
+            style = Stroke(t * 0.06f, cap = StrokeCap.Round),
+        )
+    }
+    for (k in 0 until 4) {
+        val a = (flow * 2f + k / 4f) * 6.2832f
+        drawCircle(Color.White.copy(alpha = 0.7f), t * 0.04f,
+            Offset(center.x + kotlin.math.cos(a) * t * 0.14f, center.y + kotlin.math.sin(a) * t * 0.14f))
     }
 }
 
@@ -255,7 +368,12 @@ private fun DrawScope.bend(a: Dir, b: Dir, fill: Float, inletBit: Int, flow: Flo
         val start = if (fromA) angA else angB
         val sweep = (if (fromA) delta else -delta) * fill
         val path = Path().apply { arcTo(Rect(tl, box), start, sweep, true) }
-        waterPath(path, flow, fill < 1f)
+        // momentum throws the fast water and bubbles to the outside of the bend
+        val ro = half + t * 0.1f
+        val outer = Path().apply {
+            arcTo(Rect(Offset(corner.x - ro, corner.y - ro), Size(2 * ro, 2 * ro)), start, sweep, true)
+        }
+        waterPath(path, flow, fill < 1f, outer)
     }
 }
 
@@ -276,7 +394,13 @@ fun DrawScope.drawPipe(mask: Int, fill: Float, inletBit: Int, flow: Float) {
             val first = (fill * 2f).coerceAtMost(1f)
             val second = (fill * 2f - 1f).coerceIn(0f, 1f)
             if (inArm != null) waterLine(armPoint(inArm, 1f), armPoint(inArm, 1f - first), flow, front = second == 0f && fill < 1f)
-            if (second > 0f) for (d in open) if (d.bit != inletBit) waterLine(armPoint(d, 0f), armPoint(d, second), flow, front = fill < 1f)
+            if (second > 0f) for (d in open) if (d.bit != inletBit) {
+                // water keeps going straight first; side branches fill a moment later
+                val straightOn = d.bit == opposite(inletBit)
+                val prog = if (straightOn || open.size == 2) second else ((second - 0.2f) / 0.8f).coerceIn(0f, 1f)
+                if (prog > 0f) waterLine(armPoint(d, 0f), armPoint(d, prog), flow, front = prog < 1f)
+            }
+            if (open.size >= 3 && fill >= 0.45f) turbulence(flow)
         }
     }
     for (d in open) socket(d)
@@ -563,4 +687,95 @@ fun DrawScope.drawWasher(active: Boolean, phase: Float) {
         )
     }
     drawArc(Color(0x55FFFFFF), 200f, 70f, false, p(0.33f, 0.4f), sz(0.34f, 0.34f), style = Stroke(u(0.02f), cap = StrokeCap.Round))
+}
+
+// ---------- garden ----------
+
+/** Brass garden tap on a stone post, filling a bucket. */
+fun DrawScope.drawGardenTap(active: Boolean, phase: Float) {
+    // stone post
+    shadowRect(0.32f, 0.1f, 0.36f, 0.3f, 0.04f)
+    drawRoundRect(
+        Brush.linearGradient(listOf(Color(0xFFBDB6A8), Color(0xFF8C8577)), start = p(0.32f, 0.1f), end = p(0.68f, 0.4f)),
+        p(0.32f, 0.1f), sz(0.36f, 0.3f), CornerRadius(u(0.04f)),
+    )
+    // brass bib tap
+    drawCircle(
+        Brush.radialGradient(listOf(Color(0xFFF0CF77), Color(0xFF8C6A1E)), center = p(0.48f, 0.26f), radius = u(0.08f)),
+        u(0.06f), p(0.5f, 0.28f),
+    )
+    drawRoundRect(Color(0xFFB38B2C), p(0.47f, 0.28f), sz(0.06f, 0.14f), CornerRadius(u(0.02f)))
+    drawLine(Color(0xFFD23B3B), p(0.42f, 0.24f), p(0.58f, 0.24f), u(0.035f), cap = StrokeCap.Round)
+    // metal bucket
+    shadowOval(0.27f, 0.5f, 0.46f, 0.4f)
+    drawOval(
+        Brush.horizontalGradient(listOf(Color(0xFF7D8894), Color(0xFFE3E8ED), Color(0xFF8E99A5)), startX = u(0.27f), endX = u(0.73f)),
+        p(0.27f, 0.5f), sz(0.46f, 0.4f),
+    )
+    drawOval(Color(0xFF4F5B66), p(0.31f, 0.54f), sz(0.38f, 0.32f))
+    if (active) {
+        drawOval(WaterBlue, p(0.33f, 0.56f), sz(0.34f, 0.28f))
+        drawCircle(Color.White.copy(alpha = (1f - phase) * 0.8f), u(0.03f + phase * 0.12f), p(0.5f, 0.7f), style = Stroke(u(0.012f)))
+        drawRect(
+            Brush.horizontalGradient(listOf(WaterBlue, WaterLight, WaterBlue), startX = u(0.485f), endX = u(0.515f)),
+            p(0.485f, 0.42f), sz(0.03f, 0.28f),
+        )
+    }
+}
+
+/** Pop-up sprinkler that sweeps a jet around and wets the lawn. */
+fun DrawScope.drawSprinkler(active: Boolean, phase: Float) {
+    val c = p(0.5f, 0.5f)
+    if (active) {
+        drawCircle(Color(0x55234A14), u(0.44f), c)
+        val a = phase * 6.2832f * 2f
+        for (k in 0 until 12) {
+            val q = k / 12f
+            val ang = a - q * 0.6f
+            val r = u(0.08f + q * 0.36f)
+            drawCircle(WaterLight.copy(alpha = 0.95f - q * 0.5f), u(0.022f - q * 0.008f),
+                Offset(c.x + kotlin.math.cos(ang) * r, c.y + kotlin.math.sin(ang) * r))
+        }
+        for (k in 0 until 6) {
+            val ang = a + 3.1416f + k * 0.12f
+            val r = u(0.2f + (k % 3) * 0.08f)
+            drawCircle(WaterLight.copy(alpha = 0.6f), u(0.014f), Offset(c.x + kotlin.math.cos(ang) * r, c.y + kotlin.math.sin(ang) * r))
+        }
+    }
+    drawCircle(Shadow, u(0.12f), c + p(0.02f, 0.03f))
+    drawCircle(Brush.radialGradient(listOf(Color(0xFF4B5560), Color(0xFF1E252C)), center = c, radius = u(0.13f)), u(0.12f), c)
+    drawCircle(Color(0xFFE2B93B), u(0.05f), c)
+    drawCircle(Color(0xFF1E252C), u(0.02f), c)
+}
+
+/** Round stone fountain with a jet in the middle. */
+fun DrawScope.drawFountain(active: Boolean, phase: Float) {
+    val c = p(0.5f, 0.5f)
+    drawCircle(Shadow, u(0.42f), c + p(0.03f, 0.04f))
+    drawCircle(
+        Brush.radialGradient(listOf(Color(0xFFE0D9CB), Color(0xFFA39A88)), center = p(0.45f, 0.45f), radius = u(0.45f)),
+        u(0.42f), c,
+    )
+    drawCircle(
+        if (active) Brush.radialGradient(listOf(WaterLight, WaterBlue, WaterDeep), center = c, radius = u(0.34f))
+        else Brush.radialGradient(listOf(Color(0xFF6E8796), Color(0xFF4A5D6A)), center = c, radius = u(0.34f)),
+        u(0.33f), c,
+    )
+    drawCircle(Color(0xFFC9C1B2), u(0.08f), c)
+    if (active) {
+        for (k in 0 until 3) {
+            val q = (phase + k / 3f) % 1f
+            drawCircle(Color.White.copy(alpha = (1f - q) * 0.7f), u(0.1f + q * 0.22f), c, style = Stroke(u(0.01f)))
+        }
+        // droplets thrown up and falling back around the jet
+        for (k in 0 until 10) {
+            val q = (phase * 1.5f + k / 10f) % 1f
+            val ang = k * 0.628f
+            val r = u(0.04f + q * 0.2f)
+            val lift = u(0.12f) * kotlin.math.sin(q * 3.1416f)
+            drawCircle(WaterLight, u(0.018f),
+                Offset(c.x + kotlin.math.cos(ang) * r, c.y + kotlin.math.sin(ang) * r - lift))
+        }
+        drawCircle(Color.White, u(0.035f), c - p(0f, 0.05f))
+    }
 }

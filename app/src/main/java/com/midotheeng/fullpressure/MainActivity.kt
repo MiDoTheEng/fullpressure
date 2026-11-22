@@ -20,6 +20,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -116,41 +118,58 @@ fun LevelSelect(refresh: Int, onPick: (Int) -> Unit) {
     val ctx = LocalContext.current
     val stars = remember(refresh) { LEVELS.map { loadStars(ctx, it.number) } }
     Column(
-        Modifier.fillMaxSize().padding(24.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp, vertical = 16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.height(24.dp))
         Text("FULL PRESSURE", color = Color.White, fontSize = 32.sp, fontWeight = FontWeight.Black)
         Text("Get water to every fixture", color = TextDim, fontSize = 15.sp)
-        Spacer(Modifier.height(36.dp))
-        Text("World 1 · Villa", color = Water, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(16.dp))
-        LEVELS.chunked(5).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                row.forEach { level ->
-                    val i = level.number - 1
-                    val unlocked = i == 0 || stars[i - 1] > 0
-                    Column(
-                        Modifier
-                            .size(56.dp, 72.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(if (unlocked) FixtureBg else WallC)
-                            .clickable(enabled = unlocked) { onPick(level.number) },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                    ) {
-                        Text(
-                            if (unlocked) "${level.number}" else "–",
-                            color = if (unlocked) Color.White else TextDim,
-                            fontSize = 22.sp, fontWeight = FontWeight.Bold,
-                        )
-                        Text(starText(stars[i]), color = Gold, fontSize = 11.sp)
+        Spacer(Modifier.height(20.dp))
+        LEVELS.groupBy { it.room }.forEach { (room, levels) ->
+            val got = levels.sumOf { stars[it.number - 1] }
+            Spacer(Modifier.height(16.dp))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(room.world, color = Water, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.weight(1f))
+                Text("★ $got/${levels.size * 3}", color = Gold, fontSize = 14.sp)
+            }
+            Spacer(Modifier.height(10.dp))
+            levels.chunked(5).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    row.forEach { level ->
+                        val i = level.number - 1
+                        val unlocked = i == 0 || stars[i - 1] > 0
+                        Column(
+                            Modifier
+                                .size(56.dp, 68.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .background(if (unlocked) boardColor(room) else WallC)
+                                .clickable(enabled = unlocked) { onPick(level.number) },
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center,
+                        ) {
+                            Text(
+                                if (unlocked) "${level.number}" else "🔒",
+                                color = if (unlocked) Color.White else TextDim,
+                                fontSize = if (unlocked) 22.sp else 16.sp, fontWeight = FontWeight.Bold,
+                            )
+                            Text(starText(stars[i]), color = Gold, fontSize = 11.sp)
+                        }
                     }
                 }
+                Spacer(Modifier.height(10.dp))
             }
-            Spacer(Modifier.height(12.dp))
         }
+        Spacer(Modifier.height(24.dp))
     }
+}
+
+private fun boardColor(room: Room) = when (room) {
+    Room.KITCHEN -> Color(0xFF5A3A20)
+    Room.BATHROOM -> Color(0xFF8E9BA8)
+    Room.GARDEN -> Color(0xFF2F4A22)
+    Room.VILLA -> Color(0xFF7A6A58)
+    Room.TOWER -> Color(0xFF59636E)
 }
 
 private fun starText(n: Int) = "★".repeat(n) + "☆".repeat(3 - n)
@@ -202,7 +221,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
         if (phase == Phase.FLOWING && r != null) {
             val steps = (r.depth.values.maxOrNull() ?: 0) + 2
             flowT.snapTo(0f)
-            flowT.animateTo(steps.toFloat(), tween(steps * 450, easing = LinearEasing))
+            flowT.animateTo(steps.toFloat(), tween(steps * 230, easing = LinearEasing))
             delay(if (r.won) 1600 else 900)
             if (r.won) {
                 stars = starsFor(moves, puzzle.par)
@@ -244,7 +263,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                 val cell = minOf((maxWidth - 4.dp) / level.width, (maxHeight - 4.dp) / level.height)
                 Column(
                     Modifier.clip(RoundedCornerShape(10.dp))
-                        .background(if (level.room == Room.BATHROOM) Color(0xFF8E9BA8) else Color(0xFF5A3A20))
+                        .background(boardColor(level.room))
                         .padding(2.dp)
                 ) {
                     for (row in 0 until level.height) {
@@ -331,7 +350,7 @@ fun TileView(
     val angle by animateFloatAsState(rot * 90f, tween(180, easing = FastOutSlowInEasing), label = "rot")
     val loop = rememberInfiniteTransition(label = "loop")
     val flow by loop.animateFloat(
-        0f, 1f, infiniteRepeatable(tween(600, easing = LinearEasing)), label = "flow",
+        0f, 1f, infiniteRepeatable(tween(420, easing = LinearEasing)), label = "flow",
     )
     val slow by loop.animateFloat(
         0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "slow",
@@ -342,8 +361,8 @@ fun TileView(
     val satisfied = delivered != null && delivered >= need
     Box(
         modifier
-            .padding(if (room == Room.BATHROOM) 1.dp else 0.dp)
-            .clip(RoundedCornerShape(if (room == Room.BATHROOM) 3.dp else 0.dp))
+            .padding(if (room == Room.BATHROOM || room == Room.TOWER) 1.dp else 0.dp)
+            .clip(RoundedCornerShape(if (room == Room.BATHROOM || room == Room.TOWER) 3.dp else 0.dp))
             .clickable(enabled = cell.kind == Kind.PIPE) { onTap() },
         contentAlignment = Alignment.Center,
     ) {
@@ -379,6 +398,9 @@ fun TileView(
                         FixtureType.KITCHEN -> drawKitchenSink(satisfied, slow)
                         FixtureType.DISHWASHER -> drawDishwasher(satisfied, slow)
                         FixtureType.WASHER -> drawWasher(satisfied, slow)
+                        FixtureType.GARDEN_TAP -> drawGardenTap(satisfied, slow)
+                        FixtureType.SPRINKLER -> drawSprinkler(satisfied, slow)
+                        FixtureType.FOUNTAIN -> drawFountain(satisfied, slow)
                         null -> {}
                     }
                 }

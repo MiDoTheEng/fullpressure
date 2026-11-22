@@ -29,7 +29,13 @@ fun rotateCW(mask: Int, times: Int): Int {
 
 enum class Kind { EMPTY, WALL, TANK, FIXTURE, PIPE }
 
-enum class Room(val label: String) { BATHROOM("Bathroom"), KITCHEN("Kitchen") }
+enum class Room(val label: String, val world: String) {
+    KITCHEN("Kitchen", "World 1 · Kitchen"),
+    BATHROOM("Bathroom", "World 2 · Bathrooms"),
+    GARDEN("Garden", "World 3 · Garden"),
+    VILLA("Villa", "World 4 · Villa"),
+    TOWER("Sky Tower", "World 5 · Sky Tower"),
+}
 
 enum class FixtureType(val label: String, val ch: Char) {
     SINK("Basin", 'S'),
@@ -38,6 +44,9 @@ enum class FixtureType(val label: String, val ch: Char) {
     KITCHEN("Sink", 'K'),
     DISHWASHER("Dishwasher", 'D'),
     WASHER("Washer", 'M'),
+    GARDEN_TAP("Tap", 'G'),
+    SPRINKLER("Sprinkler", 'P'),
+    FOUNTAIN("Fountain", 'N'),
 }
 
 data class Cell(
