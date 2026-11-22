@@ -337,6 +337,8 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                                 .clip(RoundedCornerShape(4.dp)).background(Color(0xCC0E1A2B)).padding(horizontal = 4.dp),
                         )
                     }
+                    Box {
+                    Column {
                     for (row in 0 until level.height) {
                         Row {
                             for (col in 0 until level.width) {
@@ -376,6 +378,25 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                                 )
                             }
                         }
+                    }
+                    }
+                    // leaks are drawn over the whole board so the water can burst out into the next square
+                    val leaks = if (phase == Phase.PLAYING || r == null) emptyList() else r.leakEnds.mapNotNull { (i, bits) ->
+                        val kind = level.cells[i].kind
+                        val f = if (kind == Kind.TANK) (t * 2f - 1f).coerceIn(0f, 1f) else fillOf(i)
+                        if (f < 1f) null else {
+                            val d0 = if (kind == Kind.TANK) 0f else (r.depth[i]?.toFloat() ?: 0f) + 1f
+                            val grow = if (phase == Phase.DONE) 1f else ((t - d0 - 1f) / 3f).coerceIn(0f, 1f)
+                            LeakFx(i / level.width, i % level.width, bits, grow)
+                        }
+                    }
+                    if (leaks.isNotEmpty()) {
+                        val leakLoop = rememberInfiniteTransition(label = "leak")
+                        val leakPhase by leakLoop.animateFloat(0f, 1f, infiniteRepeatable(tween(700, easing = LinearEasing)), label = "leakPhase")
+                        Canvas(Modifier.matchParentSize()) {
+                            for (fx in leaks) drawLeakBurst(fx, cell.toPx(), leakPhase)
+                        }
+                    }
                     }
                 }
             }
@@ -495,12 +516,10 @@ fun TileView(
                 Modifier.fillMaxSize().graphicsLayer { rotationZ = angle - rot * 90f }
             ) {
                 drawPipe(rotateCW(cell.baseMask, rot), fill, inlet, flow)
-                if (leakMask != 0) drawLeaks(leakMask, slow, leakGrow)
             }
             Kind.TANK -> Canvas(Modifier.fillMaxSize()) {
                 // water inlet into the house from the roof tank, with its fixed outlets
                 drawInlet(sides, fill, flow, slow, showArrows = fill == 0f)
-                if (leakMask != 0) drawLeaks(leakMask, slow, leakGrow)
             }
             Kind.FIXTURE -> {
                 Canvas(Modifier.fillMaxSize()) {

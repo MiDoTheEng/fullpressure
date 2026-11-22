@@ -1238,3 +1238,59 @@ fun DrawScope.drawInlet(outlets: Int, fill: Float, flow: Float, phase: Float, sh
     drawArc(Color(0x66FFFFFF), 200f, 60f, false, c - Offset(r * 0.6f, r * 0.6f), Size(r * 1.2f, r * 1.2f), style = Stroke(u(0.01f), cap = StrokeCap.Round))
     if (showArrows) drawOutletArrows(outlets and N.inv(), phase)
 }
+
+// ---------- leak bursts (drawn over the whole board) ----------
+
+class LeakFx(val row: Int, val col: Int, val bits: Int, val grow: Float)
+
+/** A burst pipe: jet of water, flying drops, splash rings, a spreading puddle and a pulsing warning. */
+fun DrawScope.drawLeakBurst(fx: LeakFx, cell: Float, phase: Float) {
+    val cc = Offset((fx.col + 0.5f) * cell, (fx.row + 0.5f) * cell)
+    for (d in DIRS) {
+        if (fx.bits and d.bit == 0) continue
+        val dir = Offset(d.dc.toFloat(), d.dr.toFloat())
+        val perp = Offset(-d.dr.toFloat(), d.dc.toFloat())
+        val e = cc + dir * (cell * 0.47f)                 // the open pipe end
+        val g = fx.grow
+        // puddle spreading across the floor beyond the open end
+        val pc = e + dir * (cell * (0.2f + 0.2f * g))
+        val pr = cell * (0.22f + 0.5f * g)
+        drawOval(
+            Brush.radialGradient(listOf(Color(0xCC2F8FE0), Color(0x993FA9F5), Color(0x003FA9F5)), center = pc, radius = pr),
+            Offset(pc.x - pr, pc.y - pr * 0.75f), Size(pr * 2, pr * 1.5f),
+        )
+        drawOval(Color(0x551668B8), Offset(pc.x - pr * 0.8f, pc.y - pr * 0.6f), Size(pr * 1.6f, pr * 1.2f), style = Stroke(cell * 0.012f))
+        // the jet: a thick wobbling stream bursting out of the pipe end
+        val wob = kotlin.math.sin(phase * 6.2832f * 2f) * cell * 0.04f
+        val jetEnd = e + dir * (cell * 0.42f) + perp * wob
+        val jet = androidx.compose.ui.graphics.Path().apply {
+            moveTo(e.x, e.y)
+            quadraticBezierTo((e + dir * (cell * 0.2f) - perp * wob).x, (e + dir * (cell * 0.2f) - perp * wob).y, jetEnd.x, jetEnd.y)
+        }
+        drawPath(jet, Color(0xFF1668B8), style = Stroke(cell * 0.12f, cap = StrokeCap.Round))
+        drawPath(jet, Color(0xFF5CC4FF), style = Stroke(cell * 0.08f, cap = StrokeCap.Round))
+        drawPath(jet, Color(0xCCFFFFFF), style = Stroke(cell * 0.025f, cap = StrokeCap.Round))
+        // drops flying out in a fan
+        for (k in 0 until 18) {
+            val q = (phase * 1.3f + k / 18f) % 1f
+            val fan = ((k * 7) % 9 - 4f) / 4f
+            val pos = e + dir * (q * cell * 0.62f) + perp * (fan * q * cell * 0.45f)
+            val rr = cell * (0.035f - q * 0.015f)
+            drawCircle(Color(0xFF1668B8).copy(alpha = 1f - q), rr * 1.25f, pos)
+            drawCircle(Color(0xFF8FDBFF).copy(alpha = 1f - q), rr, pos)
+        }
+        // splash rings where it lands
+        for (k in 0 until 3) {
+            val q = (phase + k / 3f) % 1f
+            drawCircle(Color.White.copy(alpha = (1f - q) * 0.8f), cell * (0.04f + q * 0.2f), e + dir * (cell * 0.45f), style = Stroke(cell * 0.014f))
+        }
+        // pulsing red warning at the leak
+        val pulse = 0.5f + 0.5f * kotlin.math.sin(phase * 6.2832f)
+        val wpos = e - dir * (cell * 0.18f) + perp * (cell * 0.22f)
+        drawCircle(Color(0x55E5484D), cell * (0.13f + 0.05f * pulse), wpos)
+        drawCircle(Color(0xFFE5484D), cell * 0.1f, wpos)
+        drawCircle(Color.White, cell * 0.1f, wpos, style = Stroke(cell * 0.012f))
+        drawLine(Color.White, wpos - Offset(0f, cell * 0.05f), wpos + Offset(0f, cell * 0.012f), cell * 0.025f, cap = StrokeCap.Round)
+        drawCircle(Color.White, cell * 0.014f, wpos + Offset(0f, cell * 0.045f))
+    }
+}
