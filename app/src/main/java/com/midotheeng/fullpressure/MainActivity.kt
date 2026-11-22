@@ -60,7 +60,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -337,6 +339,16 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                                 .clip(RoundedCornerShape(4.dp)).background(Color(0xCC0E1A2B)).padding(horizontal = 4.dp),
                         )
                     }
+                    // leaks: puddles are painted on each square's floor; the outpouring is drawn on top
+                    val leaks = if (phase == Phase.PLAYING || r == null) emptyList() else r.leakEnds.mapNotNull { (i, bits) ->
+                        val kind = level.cells[i].kind
+                        val f = if (kind == Kind.TANK) (t * 2f - 1f).coerceIn(0f, 1f) else fillOf(i)
+                        if (f < 1f) null else {
+                            val d0 = if (kind == Kind.TANK) 0f else (r.depth[i]?.toFloat() ?: 0f) + 1f
+                            val grow = if (phase == Phase.DONE) 1f else ((t - d0 - 1f) / 3f).coerceIn(0f, 1f)
+                            LeakFx(i / level.width, i % level.width, bits, grow)
+                        }
+                    }
                     Box {
                     Column {
                     for (row in 0 until level.height) {
@@ -351,6 +363,10 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                                 TileView(
                                     room = level.room,
                                     index = i,
+                                    row = row,
+                                    col = col,
+                                    cellPx = with(LocalDensity.current) { cell.toPx() },
+                                    leaks = leaks,
                                     cell = level.cells[i],
                                     rot = rots[i],
                                     fill = fill,
@@ -379,16 +395,6 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                             }
                         }
                     }
-                    }
-                    // leaks are drawn over the whole board so the water can burst out into the next square
-                    val leaks = if (phase == Phase.PLAYING || r == null) emptyList() else r.leakEnds.mapNotNull { (i, bits) ->
-                        val kind = level.cells[i].kind
-                        val f = if (kind == Kind.TANK) (t * 2f - 1f).coerceIn(0f, 1f) else fillOf(i)
-                        if (f < 1f) null else {
-                            val d0 = if (kind == Kind.TANK) 0f else (r.depth[i]?.toFloat() ?: 0f) + 1f
-                            val grow = if (phase == Phase.DONE) 1f else ((t - d0 - 1f) / 3f).coerceIn(0f, 1f)
-                            LeakFx(i / level.width, i % level.width, bits, grow)
-                        }
                     }
                     if (leaks.isNotEmpty()) {
                         val leakLoop = rememberInfiniteTransition(label = "leak")
@@ -485,7 +491,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
 
 @Composable
 fun TileView(
-    room: Room, index: Int, cell: Cell, rot: Int, fill: Float, inlet: Int, leakMask: Int, leakGrow: Float, delivered: Int?,
+    room: Room, index: Int, row: Int, col: Int, cellPx: Float, leaks: List<LeakFx>, cell: Cell, rot: Int, fill: Float, inlet: Int, leakMask: Int, leakGrow: Float, delivered: Int?,
     need: Int, tank: Int, sides: Int, modifier: Modifier, onTap: () -> Unit,
 ) {
     val angle by animateFloatAsState(rot * 90f, tween(180, easing = FastOutSlowInEasing), label = "rot")
@@ -507,9 +513,16 @@ fun TileView(
             .clickable(enabled = cell.kind == Kind.PIPE) { onTap() },
         contentAlignment = Alignment.Center,
     ) {
+        val pad = with(LocalDensity.current) { (if (room == Room.BATHROOM || room == Room.TOWER || room == Room.STREET) 1.dp else 0.dp).toPx() }
         Canvas(Modifier.fillMaxSize()) {
             if (cell.kind == Kind.WALL) drawWall(room, index) else drawFloor(room, index)
-            if (leakMask != 0) drawRect(Leak.copy(alpha = 0.22f))
+            if (leakMask != 0) drawRect(Leak.copy(alpha = 0.16f))
+            // water spreading on this square's floor from any nearby leak
+            if (cell.kind != Kind.WALL && leaks.isNotEmpty()) {
+                translate(-(col * cellPx + pad), -(row * cellPx + pad)) {
+                    for (fx in leaks) drawPuddle(fx, cellPx, slow)
+                }
+            }
         }
         when (cell.kind) {
             Kind.PIPE -> Canvas(

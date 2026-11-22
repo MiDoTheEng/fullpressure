@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
 
 // ---------- palette ----------
 val WaterBlue = Color(0xFF3FA9F5)
@@ -1243,54 +1244,118 @@ fun DrawScope.drawInlet(outlets: Int, fill: Float, flow: Float, phase: Float, sh
 
 class LeakFx(val row: Int, val col: Int, val bits: Int, val grow: Float)
 
-/** A burst pipe: jet of water, flying drops, splash rings, a spreading puddle and a pulsing warning. */
+private fun blobPath(cx: Float, cy: Float, r0: Float, dx: Float, dy: Float, stretch: Float, phase: Float, seed: Float): Path {
+    val n = 48
+    val xs = FloatArray(n)
+    val ys = FloatArray(n)
+    for (k in 0 until n) {
+        val th = 6.2832f * k / n
+        val r = r0 * (1f + 0.07f * kotlin.math.sin(2 * th + 1.3f + seed) + 0.06f * kotlin.math.sin(5 * th + 0.4f + seed * 2f) +
+            0.035f * kotlin.math.sin(9 * th + 2.1f + seed) + 0.015f * kotlin.math.sin(13 * th + phase * 6.2832f))
+        val x = kotlin.math.cos(th) * r
+        val y = kotlin.math.sin(th) * r
+        val a = (x * dx + y * dy) * stretch
+        val b = -x * dy + y * dx
+        xs[k] = cx + a * dx - b * dy
+        ys[k] = cy + a * dy + b * dx
+    }
+    return Path().apply {
+        moveTo((xs[0] + xs[n - 1]) / 2, (ys[0] + ys[n - 1]) / 2)
+        for (i in 0 until n) {
+            val j = (i + 1) % n
+            quadraticBezierTo(xs[i], ys[i], (xs[i] + xs[j]) / 2, (ys[i] + ys[j]) / 2)
+        }
+        close()
+    }
+}
+
+/**
+ * The puddle from a leak, painted on the floor (under pipes and fixtures): a flat, glossy,
+ * see-through spread of water with a wet stain, a meniscus rim, ripples and sky reflections.
+ * Coordinates are board pixels; callers translate to their own square.
+ */
+fun DrawScope.drawPuddle(fx: LeakFx, cell: Float, phase: Float) {
+    val cc = Offset((fx.col + 0.5f) * cell, (fx.row + 0.5f) * cell)
+    for (d in DIRS) {
+        if (fx.bits and d.bit == 0) continue
+        val dx = d.dc.toFloat()
+        val dy = d.dr.toFloat()
+        val e = cc + Offset(dx, dy) * (cell * 0.47f)
+        val r0 = cell * (0.16f + 0.52f * fx.grow)
+        val pc = e + Offset(dx, dy) * (r0 * 0.75f)
+        val seed = fx.row * 7f + fx.col * 3f + d.bit
+        drawPath(blobPath(pc.x, pc.y, r0 * 1.18f, dx, dy, 1.25f, phase, seed + 0.7f), Color(0x1A1B3A55))
+        val pud = blobPath(pc.x, pc.y, r0, dx, dy, 1.25f, phase, seed)
+        drawPath(pud, Brush.radialGradient(
+            0f to Color(0x618CC4E6), 0.75f to Color(0x735E9FCC), 1f to Color(0x993B7CB0),
+            center = pc - Offset(dx, dy) * (r0 * 0.3f), radius = r0 * 1.35f))
+        drawPath(pud, Color(0x7324557F), style = Stroke(cell * 0.014f))
+        translate(-cell * 0.012f, -cell * 0.012f) { drawPath(pud, Color(0x73FFFFFF), style = Stroke(cell * 0.008f)) }
+        clipPath(pud) {
+            // ripples spreading from where the water lands
+            val src = e + Offset(dx, dy) * (cell * 0.05f)
+            for (k in 0 until 3) {
+                val q = (phase + k / 3f) % 1f
+                val rr = cell * 0.06f + q * r0 * 1.6f
+                val rx = if (dx != 0f) rr else rr * 0.8f
+                val ry = if (dx != 0f) rr * 0.8f else rr
+                drawOval(Color.White.copy(alpha = (1f - q) * 0.5f), Offset(src.x - rx, src.y - ry), Size(rx * 2, ry * 2), style = Stroke(cell * 0.014f))
+            }
+            // sky reflections on the surface
+            rotate(-25f, pc + Offset(-r0 * 0.25f, -r0 * 0.35f)) {
+                val c1 = pc + Offset(-r0 * 0.25f, -r0 * 0.35f)
+                drawOval(Color(0x47FFFFFF), Offset(c1.x - r0 * 0.45f, c1.y - r0 * 0.08f), Size(r0 * 0.9f, r0 * 0.16f))
+            }
+            rotate(-25f, pc + Offset(r0 * 0.15f, r0 * 0.3f)) {
+                val c2 = pc + Offset(r0 * 0.15f, r0 * 0.3f)
+                drawOval(Color(0x2EFFFFFF), Offset(c2.x - r0 * 0.25f, c2.y - r0 * 0.05f), Size(r0 * 0.5f, r0 * 0.1f))
+            }
+        }
+    }
+}
+
+/** Water pouring out of the open pipe mouth (drawn on top): a turbulent fan, churning foam and small splashes. */
 fun DrawScope.drawLeakBurst(fx: LeakFx, cell: Float, phase: Float) {
     val cc = Offset((fx.col + 0.5f) * cell, (fx.row + 0.5f) * cell)
     for (d in DIRS) {
         if (fx.bits and d.bit == 0) continue
         val dir = Offset(d.dc.toFloat(), d.dr.toFloat())
         val perp = Offset(-d.dr.toFloat(), d.dc.toFloat())
-        val e = cc + dir * (cell * 0.47f)                 // the open pipe end
-        val g = fx.grow
-        // puddle spreading across the floor beyond the open end
-        val pc = e + dir * (cell * (0.2f + 0.2f * g))
-        val pr = cell * (0.22f + 0.5f * g)
-        drawOval(
-            Brush.radialGradient(listOf(Color(0xCC2F8FE0), Color(0x993FA9F5), Color(0x003FA9F5)), center = pc, radius = pr),
-            Offset(pc.x - pr, pc.y - pr * 0.75f), Size(pr * 2, pr * 1.5f),
-        )
-        drawOval(Color(0x551668B8), Offset(pc.x - pr * 0.8f, pc.y - pr * 0.6f), Size(pr * 1.6f, pr * 1.2f), style = Stroke(cell * 0.012f))
-        // the jet: a thick wobbling stream bursting out of the pipe end
-        val wob = kotlin.math.sin(phase * 6.2832f * 2f) * cell * 0.04f
-        val jetEnd = e + dir * (cell * 0.42f) + perp * wob
-        val jet = androidx.compose.ui.graphics.Path().apply {
-            moveTo(e.x, e.y)
-            quadraticBezierTo((e + dir * (cell * 0.2f) - perp * wob).x, (e + dir * (cell * 0.2f) - perp * wob).y, jetEnd.x, jetEnd.y)
+        val e = cc + dir * (cell * 0.47f)
+        val w0 = cell * 0.09f
+        val len = cell * (0.16f + 0.1f * fx.grow)
+        fun pt(along: Float, side: Float) = e + dir * along + perp * side
+        val fan = Path().apply {
+            val a = pt(0f, w0); moveTo(a.x, a.y)
+            val b1 = pt(len * 0.5f, w0 * 1.8f); val b2 = pt(len, w0 * 2.2f); quadraticBezierTo(b1.x, b1.y, b2.x, b2.y)
+            val c1 = pt(len * 1.25f, 0f); val c2 = pt(len, -w0 * 2.2f); quadraticBezierTo(c1.x, c1.y, c2.x, c2.y)
+            val d1 = pt(len * 0.5f, -w0 * 1.8f); val d2 = pt(0f, -w0); quadraticBezierTo(d1.x, d1.y, d2.x, d2.y)
+            close()
         }
-        drawPath(jet, Color(0xFF1668B8), style = Stroke(cell * 0.12f, cap = StrokeCap.Round))
-        drawPath(jet, Color(0xFF5CC4FF), style = Stroke(cell * 0.08f, cap = StrokeCap.Round))
-        drawPath(jet, Color(0xCCFFFFFF), style = Stroke(cell * 0.025f, cap = StrokeCap.Round))
-        // drops flying out in a fan
-        for (k in 0 until 18) {
-            val q = (phase * 1.3f + k / 18f) % 1f
-            val fan = ((k * 7) % 9 - 4f) / 4f
-            val pos = e + dir * (q * cell * 0.62f) + perp * (fan * q * cell * 0.45f)
-            val rr = cell * (0.035f - q * 0.015f)
-            drawCircle(Color(0xFF1668B8).copy(alpha = 1f - q), rr * 1.25f, pos)
-            drawCircle(Color(0xFF8FDBFF).copy(alpha = 1f - q), rr, pos)
+        drawPath(fan, Color(0x99D6F1FF))
+        // foam churning at the mouth
+        for (k in 0 until 12) {
+            val q = (phase * 1.5f + k / 12f) % 1f
+            val side = ((k * 5) % 7 - 3f) / 3f
+            val pos = pt(cell * 0.02f + q * len * 1.1f, side * w0 * (0.6f + q * 1.4f))
+            val r = cell * (0.012f + 0.012f * ((k * 3) % 4) / 3f) * (1f - q * 0.5f)
+            drawCircle(Color.White.copy(alpha = 0.9f * (1f - q * 0.7f)), r, pos)
         }
-        // splash rings where it lands
-        for (k in 0 until 3) {
-            val q = (phase + k / 3f) % 1f
-            drawCircle(Color.White.copy(alpha = (1f - q) * 0.8f), cell * (0.04f + q * 0.2f), e + dir * (cell * 0.45f), style = Stroke(cell * 0.014f))
+        // a few small splashes hopping near the mouth
+        for (k in 0 until 5) {
+            val q = (phase * 2f + k / 5f) % 1f
+            val side = (k - 2) / 2f
+            val hop = kotlin.math.sin(q * 3.1416f)
+            val pos = pt(cell * 0.05f + q * cell * 0.22f, side * cell * 0.16f) - Offset(0f, hop * cell * 0.03f)
+            drawCircle(Color(0xFFE6F7FF).copy(alpha = 1f - q), cell * 0.017f, pos)
+            drawCircle(Color(0xFF2A72B0).copy(alpha = (1f - q) * 0.8f), cell * 0.017f, pos, style = Stroke(cell * 0.006f))
         }
-        // pulsing red warning at the leak
+        // small pulsing marker so kids can find the leak
         val pulse = 0.5f + 0.5f * kotlin.math.sin(phase * 6.2832f)
-        val wpos = e - dir * (cell * 0.18f) + perp * (cell * 0.22f)
-        drawCircle(Color(0x55E5484D), cell * (0.13f + 0.05f * pulse), wpos)
-        drawCircle(Color(0xFFE5484D), cell * 0.1f, wpos)
-        drawCircle(Color.White, cell * 0.1f, wpos, style = Stroke(cell * 0.012f))
-        drawLine(Color.White, wpos - Offset(0f, cell * 0.05f), wpos + Offset(0f, cell * 0.012f), cell * 0.025f, cap = StrokeCap.Round)
-        drawCircle(Color.White, cell * 0.014f, wpos + Offset(0f, cell * 0.045f))
+        val wpos = e - dir * (cell * 0.2f) + perp * (cell * 0.24f)
+        drawCircle(Color(0x44E5484D), cell * (0.08f + 0.04f * pulse), wpos)
+        drawCircle(Color(0xFFE5484D), cell * 0.065f, wpos)
+        drawLine(Color.White, wpos - Offset(0f, cell * 0.032f), wpos + Offset(0f, cell * 0.008f), cell * 0.02f, cap = StrokeCap.Round)
+        drawCircle(Color.White, cell * 0.011f, wpos + Offset(0f, cell * 0.03f))
     }
 }
