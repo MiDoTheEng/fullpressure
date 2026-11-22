@@ -86,6 +86,7 @@ class FlowResult(
     val order: List<Int>,                 // cells in the order water reaches them (pipes and fixtures)
     val pressure: Map<Int, Int>,          // pressure left in each filled pipe
     val leaks: Set<Int>,                  // filled pipes with an open end
+    val leakEnds: Map<Int, Int>,          // which sides of each leaking pipe are open
     val fixturePressure: Map<Int, Int>,   // pressure delivered to each fixture
     val won: Boolean,
     val reason: String,
@@ -152,6 +153,8 @@ fun simulate(level: Level, rots: List<Int>): FlowResult {
 
     // Any filled pipe pointing at nothing is a leak.
     val leaks = HashSet<Int>()
+    val leakEnds = HashMap<Int, Int>()
+    fun leak(i: Int, bit: Int) { leaks.add(i); leakEnds[i] = (leakEnds[i] ?: 0) or bit }
     for (i in best.keys) {
         val r = i / w
         val c = i % w
@@ -160,14 +163,14 @@ fun simulate(level: Level, rots: List<Int>): FlowResult {
             if (m and d.bit == 0) continue
             val rr = r + d.dr
             val cc = c + d.dc
-            if (!inside(rr, cc)) { leaks.add(i); continue }
+            if (!inside(rr, cc)) { leak(i, d.bit); continue }
             val j = rr * w + cc
             val ok = when (cells[j].kind) {
                 Kind.TANK, Kind.FIXTURE -> true
                 Kind.PIPE -> maskAt(j) and opposite(d.bit) != 0
                 else -> false
             }
-            if (!ok) leaks.add(i)
+            if (!ok) leak(i, d.bit)
         }
     }
 
@@ -179,7 +182,7 @@ fun simulate(level: Level, rots: List<Int>): FlowResult {
         low -> "Not enough pressure. Try a shorter route with fewer bends."
         else -> ""
     }
-    return FlowResult(order, best, leaks, fixturePressure, reason.isEmpty(), reason)
+    return FlowResult(order, best, leaks, leakEnds, fixturePressure, reason.isEmpty(), reason)
 }
 
 class Puzzle(val start: List<Int>, val par: Int)
@@ -213,4 +216,20 @@ fun starsFor(moves: Int, par: Int): Int = when {
     moves <= par -> 3
     moves <= par + maxOf(2, par / 2) -> 2
     else -> 1
+}
+
+/** Sides of cell [i] where a neighbouring pipe currently points into it. */
+fun connectedSides(level: Level, rots: List<Int>, i: Int): Int {
+    val r = i / level.width
+    val c = i % level.width
+    var sides = 0
+    for (d in DIRS) {
+        val rr = r + d.dr
+        val cc = c + d.dc
+        if (rr !in 0 until level.height || cc !in 0 until level.width) continue
+        val j = rr * level.width + cc
+        val cell = level.cells[j]
+        if (cell.kind == Kind.PIPE && rotateCW(cell.baseMask, rots[j]) and opposite(d.bit) != 0) sides = sides or d.bit
+    }
+    return sides
 }

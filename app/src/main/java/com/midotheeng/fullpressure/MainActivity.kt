@@ -5,7 +5,13 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -59,7 +65,7 @@ private val Bg = Color(0xFF0E1A2B)
 private val TileBg = Color(0xFF16263B)
 private val PipeOuter = Color(0xFF5B6B80)
 private val PipeEmpty = Color(0xFF22344C)
-private val Water = Color(0xFF3FA9F5)
+private val Water = WaterBlue
 private val Leak = Color(0xFFE5484D)
 private val Ok = Color(0xFF3DD68C)
 private val Gold = Color(0xFFF5C451)
@@ -229,9 +235,9 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
 
             // Board
             BoxWithConstraints(Modifier.fillMaxWidth().weight(1f), contentAlignment = Alignment.Center) {
-                val cell = minOf(maxWidth / level.width, maxHeight / level.height)
+                val cell = minOf((maxWidth - 4.dp) / level.width, (maxHeight - 4.dp) / level.height)
                 Column(
-                    Modifier.clip(RoundedCornerShape(10.dp)).background(TileBg)
+                    Modifier.clip(RoundedCornerShape(10.dp)).background(Color(0xFF0A131E)).padding(2.dp)
                 ) {
                     for (row in 0 until level.height) {
                         Row {
@@ -241,10 +247,12 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                                     cell = level.cells[i],
                                     rot = rots[i],
                                     wet = isWet(i),
-                                    leaking = phase == Phase.DONE && r?.leaks?.contains(i) == true,
+                                    leakMask = if (phase == Phase.DONE) r?.leakEnds?.get(i) ?: 0 else 0,
                                     delivered = if (isWet(i)) r?.fixturePressure?.get(i) else null,
                                     need = level.need,
                                     tank = level.tankPressure,
+                                    sides = if (level.cells[i].kind == Kind.TANK || level.cells[i].kind == Kind.FIXTURE)
+                                        connectedSides(level, rots, i) else 0,
                                     modifier = Modifier.size(cell),
                                     onTap = {
                                         if (phase == Phase.PLAYING && level.cells[i].kind == Kind.PIPE) {
@@ -296,70 +304,73 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
 
 @Composable
 fun TileView(
-    cell: Cell, rot: Int, wet: Boolean, leaking: Boolean, delivered: Int?,
-    need: Int, tank: Int, modifier: Modifier, onTap: () -> Unit,
+    cell: Cell, rot: Int, wet: Boolean, leakMask: Int, delivered: Int?,
+    need: Int, tank: Int, sides: Int, modifier: Modifier, onTap: () -> Unit,
 ) {
-    val angle by animateFloatAsState(rot * 90f, tween(140), label = "rot")
+    val angle by animateFloatAsState(rot * 90f, tween(180, easing = FastOutSlowInEasing), label = "rot")
+    val loop = rememberInfiniteTransition(label = "loop")
+    val flow by loop.animateFloat(
+        0f, 1f, infiniteRepeatable(tween(700, easing = LinearEasing)), label = "flow",
+    )
+    val slow by loop.animateFloat(
+        0f, 1f, infiniteRepeatable(tween(1400, easing = LinearEasing)), label = "slow",
+    )
+    val wobble by loop.animateFloat(
+        -1f, 1f, infiniteRepeatable(tween(1600, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "wobble",
+    )
+    val satisfied = delivered != null && delivered >= need
     Box(
         modifier
             .padding(1.dp)
-            .clip(RoundedCornerShape(6.dp))
-            .background(
-                when {
-                    leaking -> Leak.copy(alpha = 0.35f)
-                    cell.kind == Kind.WALL -> WallC
-                    else -> Bg.copy(alpha = 0.5f)
-                }
-            )
+            .clip(RoundedCornerShape(5.dp))
             .clickable(enabled = cell.kind == Kind.PIPE) { onTap() },
         contentAlignment = Alignment.Center,
     ) {
+        Canvas(Modifier.fillMaxSize()) {
+            if (cell.kind == Kind.WALL) drawBricks() else drawFloor()
+            if (leakMask != 0) drawRect(Leak.copy(alpha = 0.22f))
+        }
         when (cell.kind) {
-            Kind.PIPE -> Canvas(Modifier.fillMaxSize().graphicsLayer { rotationZ = angle }) {
-                val c = center
-                val outer = size.minDimension * 0.34f
-                val inner = size.minDimension * 0.20f
-                for (layer in 0..1) {
-                    val stroke = if (layer == 0) outer else inner
-                    val color = if (layer == 0) PipeOuter else if (wet) Water else PipeEmpty
-                    for (d in DIRS) {
-                        if (cell.baseMask and d.bit == 0) continue
-                        val end = Offset(c.x + d.dc * size.width / 2f, c.y + d.dr * size.height / 2f)
-                        drawLine(color, c, end, strokeWidth = stroke, cap = StrokeCap.Butt)
-                    }
-                    drawCircle(color, stroke / 2f, c)
-                }
-            }
-            Kind.TANK -> Column(
-                Modifier.fillMaxSize().padding(3.dp).clip(RoundedCornerShape(8.dp)).background(TankC),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center,
+            Kind.PIPE -> Canvas(
+                Modifier.fillMaxSize().graphicsLayer { rotationZ = angle - rot * 90f }
             ) {
-                Text("TANK", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                Text("$tank", color = Color.White, fontSize = 16.sp, fontWeight = FontWeight.Black)
+                drawPipe(rotateCW(cell.baseMask, rot), wet, flow)
+                if (leakMask != 0) drawLeaks(leakMask, slow)
+            }
+            Kind.TANK -> {
+                Canvas(Modifier.fillMaxSize()) {
+                    drawStubs(sides, true, flow)
+                    drawTank(wobble)
+                }
+                Text(
+                    "$tank", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Black,
+                    modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 3.dp)
+                        .clip(RoundedCornerShape(4.dp)).background(Color(0xCC0E1A2B)).padding(horizontal = 4.dp),
+                )
             }
             Kind.FIXTURE -> {
-                val border = when {
-                    delivered == null -> PipeOuter
-                    delivered >= need -> Ok
+                Canvas(Modifier.fillMaxSize()) {
+                    if (satisfied) drawCircle(Ok.copy(alpha = 0.18f), size.minDimension * 0.48f)
+                    drawStubs(sides, delivered != null, flow)
+                    when (cell.fixture) {
+                        FixtureType.SINK -> drawSink(satisfied, slow)
+                        FixtureType.WC -> drawWC(satisfied, slow)
+                        FixtureType.SHOWER -> drawShower(satisfied, flow)
+                        FixtureType.KITCHEN -> drawKitchen(satisfied, slow)
+                        null -> {}
+                    }
+                }
+                val pill = when {
+                    delivered == null -> Color(0xCC0E1A2B)
+                    satisfied -> Ok
                     else -> Leak
                 }
-                Column(
-                    Modifier.fillMaxSize().padding(3.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(if (delivered != null && delivered >= need) Water.copy(alpha = 0.35f) else FixtureBg)
-                        .border(BorderStroke(2.dp, border), RoundedCornerShape(8.dp)),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Text(cell.fixture?.label ?: "", color = Color.White, fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold, maxLines = 1)
-                    Text(
-                        if (delivered != null) "$delivered" else "≥$need",
-                        color = if (delivered != null) border else TextDim,
-                        fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                    )
-                }
+                Text(
+                    if (delivered != null) "$delivered" else "≥$need",
+                    color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp)
+                        .clip(RoundedCornerShape(4.dp)).background(pill).padding(horizontal = 3.dp),
+                )
             }
             else -> {}
         }
