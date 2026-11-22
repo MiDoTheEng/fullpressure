@@ -396,13 +396,6 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
                         }
                     }
                     }
-                    if (leaks.isNotEmpty()) {
-                        val leakLoop = rememberInfiniteTransition(label = "leak")
-                        val leakPhase by leakLoop.animateFloat(0f, 1f, infiniteRepeatable(tween(700, easing = LinearEasing)), label = "leakPhase")
-                        Canvas(Modifier.matchParentSize()) {
-                            for (fx in leaks) drawLeakBurst(fx, cell.toPx(), leakPhase)
-                        }
-                    }
                     }
                 }
             }
@@ -516,7 +509,6 @@ fun TileView(
         val pad = with(LocalDensity.current) { (if (room == Room.BATHROOM || room == Room.TOWER || room == Room.STREET) 1.dp else 0.dp).toPx() }
         Canvas(Modifier.fillMaxSize()) {
             if (cell.kind == Kind.WALL) drawWall(room, index) else drawFloor(room, index)
-            if (leakMask != 0) drawRect(Leak.copy(alpha = 0.16f))
             // water spreading on this square's floor from any nearby leak
             if (cell.kind != Kind.WALL && leaks.isNotEmpty()) {
                 translate(-(col * cellPx + pad), -(row * cellPx + pad)) {
