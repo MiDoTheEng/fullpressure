@@ -63,6 +63,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 
 private val Bg = Color(0xFF0E1A2B)
 private val TileBg = Color(0xFF16263B)
@@ -180,11 +181,13 @@ private enum class Phase { PLAYING, FLOWING, DONE }
 fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
     val ctx = LocalContext.current
     val puzzle = remember(level.number) { makePuzzle(level) }
+    // Harder levels (more pipes to turn) get more time: 10 s for the easiest, up to 60 s.
+    val waterIn = remember(level.number) { (6 + puzzle.par * 1.6).roundToInt().coerceIn(10, 60) }
     val rots = remember(level.number) { mutableStateListOf<Int>().apply { addAll(puzzle.start) } }
     var moves by remember(level.number) { mutableIntStateOf(0) }
     var phase by remember(level.number) { mutableStateOf(Phase.PLAYING) }
     var result by remember(level.number) { mutableStateOf<FlowResult?>(null) }
-    var countdown by remember(level.number) { mutableIntStateOf(level.waterIn) }
+    var countdown by remember(level.number) { mutableIntStateOf(waterIn) }
     var attempt by remember(level.number) { mutableIntStateOf(0) }
     var stars by remember(level.number) { mutableIntStateOf(0) }
     val flowT = remember(level.number) { Animatable(0f) }
@@ -201,7 +204,7 @@ fun GameScreen(level: Level, onBack: () -> Unit, onNext: () -> Unit) {
             moves = 0
         }
         result = null
-        countdown = level.waterIn
+        countdown = waterIn
         phase = Phase.PLAYING
         attempt++
     }
